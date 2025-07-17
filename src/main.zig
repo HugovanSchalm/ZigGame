@@ -114,13 +114,22 @@ pub fn main() !void {
     }
 
     
+    // ===[ Game Setup ]===
     var done: bool = false;
 
     while (!done) {
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
-            if (event.type == c.SDL_EVENT_QUIT) {
-                done = true;
+            switch (event.type) {
+                c.SDL_EVENT_QUIT => done = true,
+                c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
+                    c.SDLK_Q => done = true,
+                    else     => {},
+                },
+                c.SDL_EVENT_WINDOW_RESIZED => {
+                    gl.Viewport(0, 0, event.window.data1, event.window.data2);
+                },
+                else => {}
             }
         }
 
