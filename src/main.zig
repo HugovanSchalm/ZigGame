@@ -14,15 +14,20 @@ var procs: gl.ProcTable = undefined;
 const VERTEX_SOURCE = @embedFile("shaders/vertex.glsl");
 const FRAGMENT_SOURCE = @embedFile("shaders/fragment.glsl");
 
-const VERTICES: [9] f32 = .{
-    0.5, -0.5, 0.0,
-    -0.5, -0.5, 0.0,
-    0.0, 0.5, 0.0,
+const VERTICES = [_] f32 {
+    -0.5,   0.5, 0.0,
+     0.5,   0.5, 0.0,
+     0.5,  -0.5, 0.0,
+    -0.5,  -0.5, 0.0,
+};
+
+const INDICES = [_] u32 {
+    0, 1, 2,
+    0, 2, 3,
 };
 
 pub fn main() !void {
     // ===[ SDL and Windowing ]===
-    try stdout.print("Hoi\n", .{});
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
         return error.CouldNotInitSDL;
     }
@@ -51,14 +56,22 @@ pub fn main() !void {
     gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(VERTICES)), &VERTICES, gl.STATIC_DRAW);
 
+    var ebo: c_uint = undefined;
+    gl.GenBuffers(1, @ptrCast(&ebo));
+    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(INDICES)), &INDICES, gl.STATIC_DRAW);
+
     gl.VertexAttribPointer(0, 3, gl.FLOAT, 0, 0, 0);
     gl.EnableVertexAttribArray(0);
+
+    gl.BindVertexArray(0);
 
     const shaderTuple = struct {
         shader: c_uint,
         type: c_uint,
         source: [*] const u8,
     };
+
     // ===[ Shaders ]===
     var shaderData  = [2] shaderTuple {
         .{.shader = undefined, .type = gl.VERTEX_SHADER, .source = VERTEX_SOURCE.ptr},
@@ -116,7 +129,7 @@ pub fn main() !void {
 
         gl.UseProgram(shaderProgram);
         gl.BindVertexArray(vao);
-        gl.DrawArrays(gl.TRIANGLES, 0, 3);
+        gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
         _ = c.SDL_GL_SwapWindow(window);
     }
 }
