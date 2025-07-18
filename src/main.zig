@@ -9,6 +9,7 @@ const c = @cImport(
 );
 const gl = @import("gl");
 const zm = @import("zm");
+const Shader = @import("shader.zig");
 
 var procs: gl.ProcTable = undefined;
 
@@ -68,53 +69,8 @@ pub fn main() !void {
 
     gl.BindVertexArray(0);
 
-    const shaderTuple = struct {
-        shader: c_uint,
-        type: c_uint,
-        source: [*] const u8,
-    };
-
     // ===[ Shaders ]===
-    var shaderData  = [2] shaderTuple {
-        .{.shader = undefined, .type = gl.VERTEX_SHADER, .source = VERTEX_SOURCE.ptr},
-        .{.shader = undefined, .type = gl.FRAGMENT_SHADER, .source = FRAGMENT_SOURCE.ptr},
-    };
-
-    const shaderProgram = gl.CreateProgram();
-
-    for (&shaderData) |*data| {
-        data.shader = gl.CreateShader(data.type);
-        gl.ShaderSource(data.shader, 1, @ptrCast(&data.source), null);
-        gl.CompileShader(data.shader);
-
-        var success: c_int = undefined;
-        gl.GetShaderiv(data.shader, gl.COMPILE_STATUS, &success);
-
-        if (success == 0) {
-            var infoLog: [512]u8 = undefined;
-            gl.GetShaderInfoLog(data.shader, 512, null, &infoLog);
-            try stderr.print("{s}\n", .{infoLog});
-            return error.CouldNotCompileShader;
-        }
-
-        gl.AttachShader(shaderProgram, data.shader);
-    }
-
-    gl.LinkProgram(shaderProgram);
-
-    var success: c_int = undefined;
-    gl.GetProgramiv(shaderProgram, gl.LINK_STATUS, &success);
-    if (success == 0) {
-        var infoLog: [512]u8 = undefined;
-        gl.GetProgramInfoLog(shaderProgram, 512, null, &infoLog);
-        try stderr.print("{s}\n", .{infoLog});
-        return error.CouldNotLinkShader;
-    }
-
-    for (&shaderData) |*data| {
-        gl.DeleteShader(data.shader);
-    }
-
+    const shader = try Shader.init(VERTEX_SOURCE, FRAGMENT_SOURCE);
     
     // ===[ Game Setup ]===
     var done: bool = false;
@@ -141,13 +97,17 @@ pub fn main() !void {
         gl.ClearColor(0.5, 1.0, 0.5, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
-        gl.UseProgram(shaderProgram);
         const model = zm.Mat4f.translation(-2.0, 0.0, -1.0);
         const camPos = zm.Mat4f.translation(0.0, 0.0, 0.0);
         const camRot = zm.Mat4f.lookAt(.{0.0, 0.0, 0.0}, .{-2.0, 0.0, -10.0}, zm.vec.up(f32));
         const view = camPos.multiply(camRot);
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), aspectratio, 0.1, 100.0);
 
+        shader.setMat4f("model", &model);
+        shader.setMat4f("view", &view);
+        shader.setMat4f("projection", &projection);
+
+        shader.use();
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
         _ = c.SDL_GL_SwapWindow(window);
