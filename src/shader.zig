@@ -1,0 +1,62 @@
+const std = @import("std");
+const stderr = std.io.getStdErr().writer();
+const gl = @import("gl");
+const zm = @import("zm");
+
+pub const Shader = struct {
+    id: u32,
+
+    pub fn use(self: Shader) void {
+        gl.UseProgram(self.id);
+    }
+
+    pub fn setMat4f(self: Shader, name: [*:0] const u8, value: * const zm.Mat4f) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.UniformMatrix4fv(uniformLocation, 1, gl.TRUE, @ptrCast(value));
+    }
+};
+
+pub fn init(vertexSource: [] const u8, fragmentSource: [] const u8) !Shader {
+    const programId = gl.CreateProgram();
+
+    var shaders = [_] c_uint { undefined, undefined };
+    const types = [_] c_uint { gl.VERTEX_SHADER, gl.FRAGMENT_SHADER };
+    const sources = [_][*] const u8 { vertexSource.ptr, fragmentSource.ptr };
+
+    for (&shaders, types, sources) |*shader, shaderType, source| {
+        shader.* = gl.CreateShader(shaderType);
+        gl.ShaderSource(shader.*, 1, @ptrCast(&source), null);
+        gl.CompileShader(shader.*);
+
+        var success: c_int = undefined;
+        gl.GetShaderiv(shader.*, gl.COMPILE_STATUS, &success);
+
+        if (success == 0) {
+            var infoLog: [512]u8 = undefined;
+            gl.GetShaderInfoLog(shader.*, 512, null, &infoLog);
+            try stderr.print("{s}\n", .{infoLog});
+            return error.CouldNotCompileShader;
+        }
+
+        gl.AttachShader(programId, shader.*);
+    }
+
+    gl.LinkProgram(programId);
+
+    for (shaders) |shader| {
+        gl.DeleteShader(shader);
+    }
+
+    var success: c_int = undefined;
+    gl.GetProgramiv(programId, gl.LINK_STATUS, &success);
+    if (success == 0) {
+        var infoLog: [512]u8 = undefined;
+        gl.GetProgramInfoLog(programId, 512, null, &infoLog);
+        try stderr.print("{s}\n", .{infoLog});
+        return error.CouldNotLinkShader;
+    }
+
+    return .{
+        .id = programId
+    };
+}
