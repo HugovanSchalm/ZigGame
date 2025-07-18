@@ -8,6 +8,7 @@ const c = @cImport(
     }
 );
 const gl = @import("gl");
+const zm = @import("zm");
 
 var procs: gl.ProcTable = undefined;
 
@@ -32,6 +33,7 @@ pub fn main() !void {
         return error.CouldNotInitSDL;
     }
 
+    var aspectratio: f32 = 800.0 / 600.0;
     const window: *c.SDL_Window = c.SDL_CreateWindow("Videogame", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE).?;
     defer c.SDL_DestroyWindow(window);
 
@@ -127,6 +129,9 @@ pub fn main() !void {
                     else     => {},
                 },
                 c.SDL_EVENT_WINDOW_RESIZED => {
+                    const windowWidth: f32 = @floatFromInt(event.window.data1);
+                    const windowHeight: f32 = @floatFromInt(event.window.data2);
+                    aspectratio = windowWidth / windowHeight;
                     gl.Viewport(0, 0, event.window.data1, event.window.data2);
                 },
                 else => {}
@@ -137,6 +142,12 @@ pub fn main() !void {
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         gl.UseProgram(shaderProgram);
+        const model = zm.Mat4f.translation(-2.0, 0.0, -1.0);
+        const camPos = zm.Mat4f.translation(0.0, 0.0, 0.0);
+        const camRot = zm.Mat4f.lookAt(.{0.0, 0.0, 0.0}, .{-2.0, 0.0, -10.0}, zm.vec.up(f32));
+        const view = camPos.multiply(camRot);
+        const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), aspectratio, 0.1, 100.0);
+
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
         _ = c.SDL_GL_SwapWindow(window);

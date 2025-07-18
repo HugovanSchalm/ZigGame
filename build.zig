@@ -11,6 +11,11 @@ pub fn build(b: *std.Build) void {
         .extensions = &.{}
     });
 
+    const zm = b.dependency("zm", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "ZigGame",
         .root_source_file = b.path("src/main.zig"),
@@ -21,6 +26,7 @@ pub fn build(b: *std.Build) void {
     exe.linkLibC();
     exe.linkSystemLibrary("SDL3");
     exe.root_module.addImport("gl", glbindings);
+    exe.root_module.addImport("zm", zm.module("zm"));
 
     b.installArtifact(exe);
 
