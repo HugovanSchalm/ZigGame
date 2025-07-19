@@ -10,6 +10,7 @@ const c = @cImport(
 const gl = @import("gl");
 const zm = @import("zm");
 const Shader = @import("shader.zig");
+const Camera = @import("camera.zig");
 
 var procs: gl.ProcTable = undefined;
 
@@ -37,6 +38,16 @@ pub fn main() !void {
     var aspectratio: f32 = 800.0 / 600.0;
     const window: *c.SDL_Window = c.SDL_CreateWindow("Videogame", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE).?;
     defer c.SDL_DestroyWindow(window);
+
+    if (!c.SDL_SetWindowRelativeMouseMode(window, true)) {
+        return error.CouldNotGrabMouse;
+    }
+    defer _ = c.SDL_SetWindowRelativeMouseMode(window, false);
+
+    if (!c.SDL_SetWindowMouseGrab(window, true)) {
+        return error.CouldNotGrabMouse;
+    }
+    defer _ = c.SDL_SetWindowMouseGrab(window, false);
 
     // ===[ OpenGL init ]===
     const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(window);
@@ -73,17 +84,62 @@ pub fn main() !void {
     const shader = try Shader.init(VERTEX_SOURCE, FRAGMENT_SOURCE);
     
     // ===[ Game Setup ]===
+    var camera = Camera.init();
+    var cameraDirection = zm.Vec3f { 0.0, 0.0, 0.0 };
     var done: bool = false;
 
+    var lasttime = c.SDL_GetTicks();
+
     while (!done) {
+        const curtime = c.SDL_GetTicks();
+        var dt: f32 = @floatFromInt(curtime - lasttime);
+        dt /= 1000.0;
+        lasttime = curtime;
+
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
             switch (event.type) {
                 c.SDL_EVENT_QUIT => done = true,
                 c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
-                    c.SDLK_Q => done = true,
+                    c.SDLK_Q => 
+                        done = true,
+                    c.SDLK_W => 
+                        cameraDirection[2] =  1,
+                    c.SDLK_A => 
+                        cameraDirection[0] = -1,
+                    c.SDLK_S => 
+                        cameraDirection[2] = -1,
+                    c.SDLK_D => 
+                        cameraDirection[0] =  1,
+                    c.SDLK_SPACE =>
+                        cameraDirection[1] =  1,
+                    c.SDLK_LSHIFT =>
+                        cameraDirection[1] = -1,
                     else     => {},
                 },
+                c.SDL_EVENT_KEY_UP => switch(event.key.key) {
+                    c.SDLK_W => if (cameraDirection[2] == 1) {
+                        cameraDirection[2] = 0;
+                    },
+                    c.SDLK_A => if (cameraDirection[0] == -1) {
+                        cameraDirection[0] = 0;
+                    },
+                    c.SDLK_S => if (cameraDirection[2] == -1) {
+                        cameraDirection[2] = 0;
+                    },
+                    c.SDLK_D => if (cameraDirection[0] == 1) {
+                        cameraDirection[0] = 0;
+                    },
+                    c.SDLK_SPACE => if (cameraDirection[1] == 1) {
+                        cameraDirection[1] = 0;
+                    },
+                    c.SDLK_LSHIFT => if (cameraDirection[1] == -1) {
+                        cameraDirection[1] = 0;
+                    },
+                    else     => {},
+                },
+                c.SDL_EVENT_MOUSE_MOTION => 
+                    camera.applyMouseMovement(event.motion.xrel, event.motion.yrel),
                 c.SDL_EVENT_WINDOW_RESIZED => {
                     const windowWidth: f32 = @floatFromInt(event.window.data1);
                     const windowHeight: f32 = @floatFromInt(event.window.data2);
@@ -97,10 +153,10 @@ pub fn main() !void {
         gl.ClearColor(0.5, 1.0, 0.5, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
-        const model = zm.Mat4f.translation(-2.0, 0.0, -1.0);
-        const camPos = zm.Mat4f.translation(0.0, 0.0, 0.0);
-        const camRot = zm.Mat4f.lookAt(.{0.0, 0.0, 0.0}, .{-2.0, 0.0, -10.0}, zm.vec.up(f32));
-        const view = camPos.multiply(camRot);
+        camera.move(cameraDirection, dt);
+
+        const model = zm.Mat4f.translation(0.0, 0.0, -10.0);
+        const view = camera.getViewMatrix();
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), aspectratio, 0.1, 100.0);
 
         shader.setMat4f("model", &model);
