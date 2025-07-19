@@ -9,6 +9,7 @@ const c = @cImport(
 );
 const gl = @import("gl");
 const zm = @import("zm");
+const zigimg = @import("zigimg");
 const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 
@@ -18,10 +19,11 @@ const VERTEX_SOURCE = @embedFile("shaders/vertex.glsl");
 const FRAGMENT_SOURCE = @embedFile("shaders/fragment.glsl");
 
 const VERTICES = [_] f32 {
-    -0.5,   0.5, 0.0,
-     0.5,   0.5, 0.0,
-     0.5,  -0.5, 0.0,
-    -0.5,  -0.5, 0.0,
+//  VERTEX COORDS       TEXTURE COORDS
+    -0.5,   0.5, 0.0,   0.0, 1.0,
+     0.5,   0.5, 0.0,   1.0, 1.0,
+     0.5,  -0.5, 0.0,   1.0, 0.0,
+    -0.5,  -0.5, 0.0,   0.0, 0.0,
 };
 
 const INDICES = [_] u32 {
@@ -30,6 +32,9 @@ const INDICES = [_] u32 {
 };
 
 pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
+    const allocator = gpa.allocator();
+
     // ===[ SDL and Windowing ]===
     if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
         return error.CouldNotInitSDL;
@@ -75,13 +80,50 @@ pub fn main() !void {
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(INDICES)), &INDICES, gl.STATIC_DRAW);
 
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, 0, 0, 0);
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 0);
     gl.EnableVertexAttribArray(0);
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 3 * @sizeOf(f32));
+    gl.EnableVertexAttribArray(1);
+
+    // ===[ Textures ]===
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.REPEAT);
+
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+    var texture: c_uint = undefined;
+    gl.GenTextures(1, @ptrCast(&texture));
+    gl.BindTexture(gl.TEXTURE_2D, texture);
+
+    {
+        const exePath = try std.fs.selfExeDirPathAlloc(allocator);
+        defer allocator.free(exePath);
+        const texturePath = try std.fs.path.join(allocator, &[_][]const u8{exePath, "/assets/textures/texture.png"});
+        defer allocator.free(texturePath);
+        var textureImage = try zigimg.Image.fromFilePath(allocator, texturePath);
+        defer textureImage.deinit();
+        try textureImage.flipVertically();
+        gl.TexImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            @intCast(textureImage.width),
+            @intCast(textureImage.height),
+            0,
+            gl.RGB,
+            gl.UNSIGNED_BYTE,
+            textureImage.rawBytes().ptr
+        );
+        gl.GenerateMipmap(gl.TEXTURE_2D);
+    }
 
     gl.BindVertexArray(0);
 
     // ===[ Shaders ]===
     const shader = try Shader.init(VERTEX_SOURCE, FRAGMENT_SOURCE);
+
+
     
     // ===[ Game Setup ]===
     var camera = Camera.init();
@@ -164,6 +206,7 @@ pub fn main() !void {
         shader.setMat4f("projection", &projection);
 
         shader.use();
+        gl.BindTexture(gl.TEXTURE_2D, texture);
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
         _ = c.SDL_GL_SwapWindow(window);

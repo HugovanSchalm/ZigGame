@@ -16,6 +16,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zigimg_dependency = b.dependency("zigimg", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "ZigGame",
         .root_source_file = b.path("src/main.zig"),
@@ -27,8 +32,16 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("SDL3");
     exe.root_module.addImport("gl", glbindings);
     exe.root_module.addImport("zm", zm.module("zm"));
+    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
+
 
     b.installArtifact(exe);
+
+    b.installDirectory(.{
+        .source_dir = b.path("./assets"),
+        .install_dir = .{ .prefix = { } },
+        .install_subdir = "bin/assets",
+    });
 
     const run_cmd = b.addRunArtifact(exe);
 
