@@ -21,6 +21,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const zgltf = b.dependency("zgltf", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "ZigGame",
         .root_source_file = b.path("src/main.zig"),
@@ -33,7 +38,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("gl", glbindings);
     exe.root_module.addImport("zm", zm.module("zm"));
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
-
+    exe.root_module.addImport("zgltf", zgltf.module("zgltf"));
 
     b.installArtifact(exe);
 

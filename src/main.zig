@@ -12,6 +12,7 @@ const zm = @import("zm");
 const zigimg = @import("zigimg");
 const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
+const Model = @import("model.zig");
 
 var procs: gl.ProcTable = undefined;
 
@@ -123,7 +124,8 @@ pub fn main() !void {
     // ===[ Shaders ]===
     const shader = try Shader.init(VERTEX_SOURCE, FRAGMENT_SOURCE);
 
-
+    // ===[ Model ]===
+    const suzanne = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin");
     
     // ===[ Game Setup ]===
     var camera = Camera.init();
@@ -209,6 +211,11 @@ pub fn main() !void {
         gl.BindTexture(gl.TEXTURE_2D, texture);
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
+
+        const suzannePos = zm.Mat4f.translation(0.0, 0.0, -2.0);
+        shader.setMat4f("model", &suzannePos);
+        suzanne.render();
+
         _ = c.SDL_GL_SwapWindow(window);
     }
 }
