@@ -12,3 +12,8 @@ The project can be compiled and ran by using the following command inside any fo
 ```
 zig build run
 ```
+# References
+- https://learnopengl.com
+    A great resource for learning OpenGL
+- https://www.david-colson.com/2021/11/30/ps1-style-renderer.html 
+    For some cool rendering techniques.
