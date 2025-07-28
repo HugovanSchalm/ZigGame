@@ -17,11 +17,11 @@ const Model = @import("model.zig");
 var procs: gl.ProcTable = undefined;
 
 const VERTICES = [_] f32 {
-//  VERTEX COORDS       TEXTURE COORDS
-    -0.5,   0.5, 0.0,   0.0, 1.0,
-     0.5,   0.5, 0.0,   1.0, 1.0,
-     0.5,  -0.5, 0.0,   1.0, 0.0,
-    -0.5,  -0.5, 0.0,   0.0, 0.0,
+//  VERTEX COORDS       TEXTURE COORDS  NORMALS
+    -0.5,   0.5, 0.0,   0.0, 1.0,       0.0, 0.0, 1.0,
+     0.5,   0.5, 0.0,   1.0, 1.0,       0.0, 0.0, 1.0,
+     0.5,  -0.5, 0.0,   1.0, 0.0,       0.0, 0.0, 1.0,
+    -0.5,  -0.5, 0.0,   0.0, 0.0,       0.0, 0.0, 1.0,
 };
 
 const INDICES = [_] u32 {
@@ -81,10 +81,12 @@ pub fn main() !void {
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(INDICES)), &INDICES, gl.STATIC_DRAW);
 
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 0);
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 0);
     gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 3 * @sizeOf(f32));
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 3 * @sizeOf(f32));
     gl.EnableVertexAttribArray(1);
+    gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
+    gl.EnableVertexAttribArray(2);
 
     // ===[ Textures ]===
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);

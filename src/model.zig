@@ -89,6 +89,8 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
     var texcoords: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
     defer texcoords.deinit();
 
+    var normals: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
+
     var indices: std.ArrayList(u16) = std.ArrayList(u16).init(allocator);
     defer indices.deinit();
 
@@ -105,6 +107,10 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
                 .texcoord => |accessor_index| {
                     const accessor = gltf.data.accessors.items[accessor_index];
                     gltf.getDataFromBufferView(f32, &texcoords, accessor, bin);
+                },
+                .normal => |normal_index| {
+                    const accessor = gltf.data.accessors.items[normal_index];
+                    gltf.getDataFromBufferView(f32, &normals, accessor, bin);
                 },
                 else => {}
             }
@@ -130,9 +136,10 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
     }
     var vertices = try std.ArrayList(f32).initCapacity(allocator, vertexpositions.items.len / 3);
 
-    for (0..vertexpositions.items.len / 3, 0..) |vertexindex, texindex| {
+    for (0..vertexpositions.items.len / 3, 0.., 0..) |vertexindex, texindex, normal_index| {
         try vertices.appendSlice(vertexpositions.items[3 * vertexindex..3 * vertexindex + 3]);
         try vertices.appendSlice(texcoords.items[2 * texindex..2 * texindex + 2]);
+        try vertices.appendSlice(normals.items[3 * normal_index..3 * normal_index + 3]);
     }
 
     // ===[ Initialize OpenGL vars ]===
@@ -162,10 +169,12 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
         );
     }
 
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 0);
+    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 0);
     gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), 3 * @sizeOf(f32));
+    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 3 * @sizeOf(f32));
     gl.EnableVertexAttribArray(1);
+    gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
+    gl.EnableVertexAttribArray(2);
 
     gl.BindVertexArray(0);
 
