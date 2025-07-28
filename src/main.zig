@@ -16,9 +16,6 @@ const Model = @import("model.zig");
 
 var procs: gl.ProcTable = undefined;
 
-const VERTEX_SOURCE = @embedFile("shaders/vertex.glsl");
-const FRAGMENT_SOURCE = @embedFile("shaders/fragment.glsl");
-
 const VERTICES = [_] f32 {
 //  VERTEX COORDS       TEXTURE COORDS
     -0.5,   0.5, 0.0,   0.0, 1.0,
@@ -65,6 +62,9 @@ pub fn main() !void {
 
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
+
+    // ===[ OpenGL Settings ]===
+    gl.Enable(gl.DEPTH_TEST);
 
     // ===[ Buffers ]===
     var vao: c_uint = undefined;
@@ -122,10 +122,12 @@ pub fn main() !void {
     gl.BindVertexArray(0);
 
     // ===[ Shaders ]===
-    const shader = try Shader.init(VERTEX_SOURCE, FRAGMENT_SOURCE);
+    const shader = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
+    const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
 
     // ===[ Model ]===
     const suzanne = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin");
+    defer suzanne.deinit();
     
     // ===[ Game Setup ]===
     var camera = Camera.init();
@@ -195,25 +197,28 @@ pub fn main() !void {
         }
 
         gl.ClearColor(0.5, 1.0, 0.5, 1.0);
-        gl.Clear(gl.COLOR_BUFFER_BIT);
+        gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         camera.move(cameraDirection, dt);
 
-        const model = zm.Mat4f.translation(0.0, 0.0, -10.0);
+        const model = zm.Mat4f.translation(2.0, 0.0, -3.0);
         const view = camera.getViewMatrix();
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), aspectratio, 0.1, 100.0);
 
-        shader.setMat4f("model", &model);
-        shader.setMat4f("view", &view);
-        shader.setMat4f("projection", &projection);
+        texturedShader.use();
+        texturedShader.setMat4f("model", &model);
+        texturedShader.setMat4f("view", &view);
+        texturedShader.setMat4f("projection", &projection);
 
-        shader.use();
         gl.BindTexture(gl.TEXTURE_2D, texture);
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
 
-        const suzannePos = zm.Mat4f.translation(0.0, 0.0, -2.0);
+        texturedShader.use();
+        const suzannePos = zm.Mat4f.translation(-2.0, 0.0, -3.0);
         shader.setMat4f("model", &suzannePos);
+        shader.setMat4f("view", &view);
+        shader.setMat4f("projection", &projection);
         suzanne.render();
 
         _ = c.SDL_GL_SwapWindow(window);
