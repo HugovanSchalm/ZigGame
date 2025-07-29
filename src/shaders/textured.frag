@@ -1,12 +1,12 @@
 #version 330 core
 
 in vec2 outTexCoord;
-in vec4 normalLightColor;
+in vec4 vertLightColor;
 
 out vec4 outColor;
 
 uniform sampler2D sampler;
 
 void main() {
-    outColor = normalLightColor * texture(sampler, outTexCoord);
+    outColor = vertLightColor * texture(sampler, outTexCoord);
 }

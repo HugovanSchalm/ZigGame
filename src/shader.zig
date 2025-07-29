@@ -10,6 +10,16 @@ pub const Shader = struct {
         gl.UseProgram(self.id);
     }
 
+    pub fn setFloat(self: Shader, name: [*:0] const u8, value: f32) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.Uniform1f(uniformLocation, value);
+    }
+
+    pub fn setVec3f(self: Shader, name: [*:0] const u8, value: * const zm.Vec3f) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.Uniform3fv(uniformLocation, 1, @ptrCast(value));
+    }
+
     pub fn setMat4f(self: Shader, name: [*:0] const u8, value: * const zm.Mat4f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.UniformMatrix4fv(uniformLocation, 1, gl.TRUE, @ptrCast(value));

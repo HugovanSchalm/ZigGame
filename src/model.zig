@@ -5,18 +5,29 @@ const zigimg = @import("zigimg");
 
 const Mesh = struct {
     vao: c_uint,
+    vbo: c_uint,
+    ebo: c_uint = 0,
     n_vertices: c_int,
-    n_indices: c_int,
-    texture: c_uint,
+    n_indices: c_int = 0,
+    texture: c_uint = 0,
 
     fn render(self: Mesh) void {
-        gl.BindTexture(gl.TEXTURE_2D, self.texture);
+        if (self.texture > 0) {
+            gl.BindTexture(gl.TEXTURE_2D, self.texture);
+        }
         gl.BindVertexArray(self.vao);
         if (self.n_indices > 0) {
             gl.DrawElements(gl.TRIANGLES, self.n_indices, gl.UNSIGNED_SHORT, 0);
         } else {
             gl.DrawArrays(gl.TRIANGLES, 0, self.n_vertices);
         }
+    }
+
+    fn deinit(self: *Mesh) void {
+        gl.DeleteBuffers(1, @ptrCast(&self.vbo));
+        gl.DeleteBuffers(1, @ptrCast(&self.ebo));
+        gl.DeleteVertexArrays(1, @ptrCast(&self.vao));
+        gl.DeleteTextures(1, @ptrCast(&self.texture));
     }
 };
 
@@ -29,10 +40,92 @@ pub const Model = struct {
         }
     }
 
-    pub fn deinit(self: Model) void {
+    pub fn deinit(self: *Model) void {
+        var i: usize = 0;
+        while (i < self.meshes.items.len) : (i += 1) {
+            var mesh = &self.meshes.items[i];
+            mesh.deinit();
+        }
         self.meshes.deinit();
     }
 };
+
+pub fn cube(allocator: std.mem.Allocator) !Model {
+    var vertices = [_]f32 {
+//       POSITIONS          TEXTURE COORDS       NORMALS
+//       FRONT
+        -0.5,  0.5,  0.5,   0.0, 1.0,            0.0,  0.0,  1.0,
+         0.5,  0.5,  0.5,   1.0, 1.0,            0.0,  0.0,  1.0,
+         0.5, -0.5,  0.5,   1.0, 0.0,            0.0,  0.0,  1.0,
+        -0.5, -0.5,  0.5,   0.0, 0.0,            0.0,  0.0,  1.0,
+//       BACK
+         0.5,  0.5, -0.5,   0.0, 1.0,            0.0,  0.0, -1.0,
+        -0.5,  0.5, -0.5,   1.0, 1.0,            0.0,  0.0, -1.0,
+        -0.5, -0.5, -0.5,   1.0, 0.0,            0.0,  0.0, -1.0,
+         0.5, -0.5, -0.5,   0.0, 0.0,            0.0,  0.0, -1.0,
+//       LEFT
+        -0.5,  0.5, -0.5,   0.0, 1.0,           -1.0,  0.0,  0.0,
+        -0.5,  0.5,  0.5,   1.0, 1.0,           -1.0,  0.0,  0.0,
+        -0.5, -0.5,  0.5,   1.0, 0.0,           -1.0,  0.0,  0.0,
+        -0.5, -0.5, -0.5,   0.0, 0.0,           -1.0,  0.0,  0.0,
+//      RIGHT
+         0.5,  0.5,  0.5,   0.0, 1.0,            1.0,  0.0,  0.0,
+         0.5,  0.5, -0.5,   1.0, 1.0,            1.0,  0.0,  0.0,
+         0.5, -0.5, -0.5,   1.0, 0.0,            1.0,  0.0,  0.0,
+         0.5, -0.5,  0.5,   0.0, 0.0,            1.0,  0.0,  0.0,
+//       TOP
+        -0.5,  0.5, -0.5,   0.0, 1.0,            0.0,  1.0,  0.0,
+         0.5,  0.5, -0.5,   1.0, 1.0,            0.0,  1.0,  0.0,
+         0.5,  0.5,  0.5,   1.0, 0.0,            0.0,  1.0,  0.0,
+        -0.5,  0.5,  0.5,   0.0, 0.0,            0.0,  1.0,  0.0,
+//       BOTTOM
+         0.5,  0.5, -0.5,   0.0, 1.0,            0.0, -1.0,  0.0,
+        -0.5,  0.5,  0.5,   1.0, 1.0,            0.0, -1.0,  0.0,
+        -0.5,  0.5,  0.5,   1.0, 0.0,            0.0, -1.0,  0.0,
+         0.5,  0.5, -0.5,   0.0, 0.0,            0.0, -1.0,  0.0,
+    };
+
+    var indices = [_]u16 {
+//      FRONT
+        0, 1, 2,
+        0, 2, 3,
+//      BACK
+        4, 5, 6,
+        4, 6, 7,
+//      LEFT
+        8, 9, 10,
+        8, 10, 11,
+//      RIGHT
+        12, 13, 14,
+        12, 14, 15,
+//      TOP
+        16, 17, 18,
+        16, 18, 19,
+//      BOTTOM
+        20, 21, 22,
+        20, 22, 23,
+    };
+
+    const vao = generateAndBindVAO();
+    const vbo = generateAndBindVBO(&vertices);
+    const ebo = generateAndBindEBO(&indices);
+    generateVertexAttribs();
+
+    gl.BindVertexArray(0);
+
+    var meshes = try std.ArrayList(Mesh).initCapacity(allocator, 1);
+    try meshes.append(.{
+        .vao = vao,
+        .vbo = vbo,
+        .ebo = ebo,
+        .n_vertices = vertices.len,
+        .n_indices = indices.len,
+    });
+
+    return Model {
+        .meshes = meshes,
+    };
+}
 
 pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] const u8) !Model {
     // ===[ Parse files ]===
@@ -134,6 +227,8 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
             texture = createTexture(width, height, image.rawBytes());
         }
     }
+
+    // ===[ Combine into final vertex array ]===
     var vertices = try std.ArrayList(f32).initCapacity(allocator, vertexpositions.items.len / 3);
 
     for (0..vertexpositions.items.len / 3, 0.., 0..) |vertexindex, texindex, normal_index| {
@@ -143,47 +238,69 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
     }
 
     // ===[ Initialize OpenGL vars ]===
-    var vao: c_uint = undefined;
-    gl.GenVertexArrays(1, @ptrCast(&vao));
-    gl.BindVertexArray(vao);
+    const vao = generateAndBindVAO();
+    const vbo = generateAndBindVBO(vertices.items);
+    const ebo = generateAndBindEBO(indices.items);
 
-    var vbo: c_uint = undefined;
-    gl.GenBuffers(1, @ptrCast(&vbo));
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.BufferData(
-        gl.ARRAY_BUFFER,
-        @intCast(vertices.items.len * @sizeOf(f32)),
-        vertices.items.ptr,
-        gl.STATIC_DRAW
-    );
+    generateVertexAttribs();
 
-    if (indices.items.len > 0) {
-        var ebo: c_uint = undefined;
-        gl.GenBuffers(1, @ptrCast(&ebo));
-        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-        gl.BufferData(
-            gl.ELEMENT_ARRAY_BUFFER,
-            @intCast(indices.items.len * @sizeOf(u32)),
-            indices.items.ptr,
-            gl.STATIC_DRAW
-        );
-    }
+    gl.BindVertexArray(0);
 
+    return Mesh {
+        .vao = vao,
+        .vbo = vbo,
+        .ebo = ebo,
+        .n_vertices = @intCast(vertexpositions.items.len / 3),
+        .n_indices = @intCast(indices.items.len),
+        .texture = texture,
+    };
+}
+
+fn generateVertexAttribs() void {
     gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 0);
     gl.EnableVertexAttribArray(0);
     gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 3 * @sizeOf(f32));
     gl.EnableVertexAttribArray(1);
     gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
     gl.EnableVertexAttribArray(2);
+}
 
-    gl.BindVertexArray(0);
+fn generateAndBindVAO() c_uint {
+    var vao: c_uint = undefined;
+    gl.GenVertexArrays(1, @ptrCast(&vao));
+    gl.BindVertexArray(vao);
 
-    return Mesh {
-        .vao = vao,
-        .n_vertices = @intCast(vertexpositions.items.len / 3),
-        .n_indices = @intCast(indices.items.len),
-        .texture = texture,
-    };
+    return vao;
+}
+
+fn generateAndBindVBO(vertices: []f32) c_uint {
+    var vbo: c_uint = undefined;
+    gl.GenBuffers(1, @ptrCast(&vbo));
+    gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.BufferData(
+        gl.ARRAY_BUFFER,
+        @intCast(vertices.len * @sizeOf(f32)),
+        vertices.ptr,
+        gl.STATIC_DRAW
+    );
+
+    return vbo;
+}
+
+fn generateAndBindEBO(indices: []u16) c_uint {
+    var ebo: c_uint = undefined;
+    if (indices.len > 0) {
+        gl.GenBuffers(1, @ptrCast(&ebo));
+        gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+        gl.BufferData(
+            gl.ELEMENT_ARRAY_BUFFER,
+            @intCast(indices.len * @sizeOf(u32)),
+            indices.ptr,
+            gl.STATIC_DRAW
+        );
+    }
+
+    return ebo;
 }
 
 fn createTexture(width: c_int, height: c_int, data: [] const u8) c_uint {

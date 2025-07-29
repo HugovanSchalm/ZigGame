@@ -124,12 +124,15 @@ pub fn main() !void {
     gl.BindVertexArray(0);
 
     // ===[ Shaders ]===
-    const shader = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
+    const lightShader    = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
     const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
 
-    // ===[ Model ]===
-    const suzanne = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin");
+    // ===[ Models ]===
+    var suzanne = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin");
     defer suzanne.deinit();
+
+    var cube = try Model.cube(allocator);
+    defer cube.deinit();
     
     // ===[ Game Setup ]===
     var camera = Camera.init();
@@ -140,6 +143,7 @@ pub fn main() !void {
 
     while (!done) {
         const curtime = c.SDL_GetTicks();
+        const timeFloat: f32 = @floatFromInt(curtime);
         var dt: f32 = @floatFromInt(curtime - lasttime);
         dt /= 1000.0;
         lasttime = curtime;
@@ -198,7 +202,7 @@ pub fn main() !void {
             }
         }
 
-        gl.ClearColor(0.5, 1.0, 0.5, 1.0);
+        gl.ClearColor(0.02, 0.02, 0.02, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         camera.move(cameraDirection, dt);
@@ -207,7 +211,29 @@ pub fn main() !void {
         const view = camera.getViewMatrix();
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), aspectratio, 0.1, 100.0);
 
+        const lightColor = zm.Vec3f {1.0, 1.0, 1.0};
+        const lightAngle = std.math.degreesToRadians(timeFloat / 28.0);
+        const lightRadius = 5.0;
+        const lightPosVec = zm.Vec3f {std.math.cos(lightAngle) * lightRadius, 3.0, std.math.sin(lightAngle) * lightRadius};
+        const lightPos = zm.Mat4f.translationVec3(lightPosVec);
+        const lightScale = zm.Mat4f.scalingVec3(.{0.2, 0.2, 0.2});
+
+        const lightModel = lightPos.multiply(lightScale);
+
+        lightShader.use();
+
+        texturedShader.setMat4f("model", &lightModel);
+        texturedShader.setMat4f("view", &view);
+        texturedShader.setMat4f("projection", &projection);
+
+        cube.render();
+
         texturedShader.use();
+
+        texturedShader.setVec3f("lightColor", &lightColor);
+        texturedShader.setVec3f("lightPos", &lightPosVec);
+        texturedShader.setFloat("ambientStrength", 0.1);
+
         texturedShader.setMat4f("model", &model);
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
@@ -218,9 +244,12 @@ pub fn main() !void {
 
         texturedShader.use();
         const suzannePos = zm.Mat4f.translation(-2.0, 0.0, -3.0);
-        shader.setMat4f("model", &suzannePos);
-        shader.setMat4f("view", &view);
-        shader.setMat4f("projection", &projection);
+        const suzanneAngle: f32 = std.math.degreesToRadians(timeFloat / 42.0);
+        const suzanneRot = zm.Mat4f.rotation(zm.vec.up(f32), suzanneAngle);
+        const suzanneModel = suzannePos.multiply(suzanneRot);
+        texturedShader.setMat4f("model", &suzanneModel);
+        texturedShader.setMat4f("view", &view);
+        texturedShader.setMat4f("projection", &projection);
         suzanne.render();
 
         _ = c.SDL_GL_SwapWindow(window);
