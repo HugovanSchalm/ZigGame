@@ -29,6 +29,9 @@ const INDICES = [_] u32 {
     0, 2, 3,
 };
 
+const RENDERWIDTH = 512;
+const RENDERHEIGHT = 480;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
     const allocator = gpa.allocator();
@@ -38,7 +41,9 @@ pub fn main() !void {
         return error.CouldNotInitSDL;
     }
 
-    var aspectratio: f32 = 800.0 / 600.0;
+    var windowWidth: i32 = 800;
+    var windowHeight: i32 = 600;
+    var aspectratio: f32 = @as(f32, @floatFromInt(windowWidth)) / @as(f32, @floatFromInt(windowHeight));
     const window: *c.SDL_Window = c.SDL_CreateWindow("Videogame", 800, 600, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE).?;
     defer c.SDL_DestroyWindow(window);
 
@@ -63,6 +68,7 @@ pub fn main() !void {
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
 
+
     // ===[ OpenGL Settings ]===
     gl.Enable(gl.DEPTH_TEST);
 
@@ -70,14 +76,17 @@ pub fn main() !void {
     var vao: c_uint = undefined;
     gl.GenVertexArrays(1, @ptrCast(&vao));
     gl.BindVertexArray(vao);
+    defer gl.DeleteVertexArrays(1, @ptrCast(&vao));
 
     var vbo: c_uint = undefined;
     gl.GenBuffers(1, @ptrCast(&vbo));
+    defer gl.DeleteBuffers(1, @ptrCast(&vbo));
     gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
     gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(VERTICES)), &VERTICES, gl.STATIC_DRAW);
 
     var ebo: c_uint = undefined;
     gl.GenBuffers(1, @ptrCast(&ebo));
+    defer gl.DeleteBuffers(1, @ptrCast(&ebo));
     gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
     gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(INDICES)), &INDICES, gl.STATIC_DRAW);
 
@@ -87,6 +96,39 @@ pub fn main() !void {
     gl.EnableVertexAttribArray(1);
     gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
     gl.EnableVertexAttribArray(2);
+
+    var fbo: c_uint = undefined;
+    gl.GenFramebuffers(1, @ptrCast(&fbo));
+    defer gl.DeleteFramebuffers(1, @ptrCast(&fbo));
+    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+
+    var fbtexture: c_uint = undefined;
+    gl.GenTextures(1, @ptrCast(&fbtexture));
+    defer gl.DeleteTextures(1, @ptrCast(&fbtexture));
+    gl.BindTexture(gl.TEXTURE_2D, fbtexture);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, RENDERWIDTH, RENDERHEIGHT, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.BindTexture(gl.TEXTURE_2D, 0);
+
+    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fbtexture, 0);
+    const e = gl.GetError();
+    if (e != gl.NO_ERROR) {
+        try stdout.print("{d}\n", .{e});
+    }
+
+    var rbo: c_uint = undefined;
+    gl.GenRenderbuffers(1, @ptrCast(&rbo));
+    gl.BindRenderbuffer(gl.RENDERBUFFER, rbo);
+    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, RENDERWIDTH, RENDERHEIGHT);
+    gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
+
+    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo);
+
+    if (gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
+        return error.FrameBufferNotComplete;
+    }
+    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 
     // ===[ Textures ]===
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -193,15 +235,16 @@ pub fn main() !void {
                 c.SDL_EVENT_MOUSE_MOTION => 
                     camera.applyMouseMovement(event.motion.xrel, event.motion.yrel),
                 c.SDL_EVENT_WINDOW_RESIZED => {
-                    const windowWidth: f32 = @floatFromInt(event.window.data1);
-                    const windowHeight: f32 = @floatFromInt(event.window.data2);
-                    aspectratio = windowWidth / windowHeight;
-                    gl.Viewport(0, 0, event.window.data1, event.window.data2);
+                    windowWidth = event.window.data1;
+                    windowHeight = event.window.data2;
+                    aspectratio = @as(f32, @floatFromInt(windowWidth)) / @as(f32, @floatFromInt(windowHeight));
                 },
                 else => {}
             }
         }
 
+        gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.Viewport(0, 0, RENDERWIDTH, RENDERHEIGHT);
         gl.ClearColor(0.02, 0.02, 0.02, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -251,6 +294,12 @@ pub fn main() !void {
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
         suzanne.render();
+
+        gl.BindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+        gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
+        gl.Viewport(0, 0, windowWidth, windowHeight);
+        // Could be replaced with rendering to a big triangle/quad
+        gl.BlitFramebuffer(0, 0, RENDERWIDTH, RENDERHEIGHT, 0, 0, windowWidth, windowHeight, gl.COLOR_BUFFER_BIT, gl.NEAREST);
 
         _ = c.SDL_GL_SwapWindow(window);
     }
