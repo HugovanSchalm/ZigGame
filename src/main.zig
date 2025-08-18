@@ -13,6 +13,7 @@ const zigimg = @import("zigimg");
 const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 const Model = @import("model.zig");
+const Window = @import("window.zig");
 
 var procs: gl.ProcTable = undefined;
 
@@ -29,67 +30,6 @@ const INDICES = [_] u32 {
     0, 2, 3,
 };
 
-const RENDERWIDTH = 512;
-const RENDERHEIGHT = 480;
-const RENDERASPECTRATIO = @as(f32, @floatFromInt(RENDERWIDTH)) / @as(f32, @floatFromInt(RENDERHEIGHT));
-
-const Window = struct {
-    sdlWindow: *c.SDL_Window,
-    width: i32 = 0,
-    height: i32 = 0,
-    renderX0: i32 = 0,
-    renderY0: i32 = 0,
-    renderX1: i32 = 0,
-    renderY1: i32 = 0,
-    aspectRatio: f32 = 0.0,
-
-    pub fn init(width: i32, height: i32) !Window {
-        const sdlWindow: *c.SDL_Window = c.SDL_CreateWindow(
-            "Videogame",
-            width, 
-            height, 
-            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE
-        ).?;
-
-        var window = Window {
-            .sdlWindow = sdlWindow,
-        };
-
-        window.resize(width, height);
-        return window;
-    }
-
-    pub fn deinit(self: Window) void {
-        defer c.SDL_DestroyWindow(self.sdlWindow);
-    }
-
-    pub fn resize(self: *Window, newWidth: i32, newHeight: i32) void {
-        self.width = newWidth;
-        self.height = newHeight;
-        self.aspectRatio = @as(f32, @floatFromInt(self.width)) / @as(f32, @floatFromInt(self.height));
-        self.calculateRenderBounds();
-    }
-
-    fn calculateRenderBounds(self: *Window) void {
-        if (self.aspectRatio > RENDERASPECTRATIO) {
-            const theoreticalWidth: i32 = @intFromFloat(@as(f32, @floatFromInt(self.height)) * RENDERASPECTRATIO);
-            const diff = self.width - theoreticalWidth;
-            const offset = @divFloor(diff, 2);
-            self.renderX0 = offset;
-            self.renderX1 = self.width - offset;
-            self.renderY0 = 0;
-            self.renderY1 = self.height;
-        } else {
-            const theoreticalHeight: i32 = @intFromFloat(@as(f32, @floatFromInt(self.width)) / RENDERASPECTRATIO);
-            const diff = self.height - theoreticalHeight;
-            const offset = @divFloor(diff, 2);
-            self.renderX0 = 0;
-            self.renderX1 = self.width;
-            self.renderY0 = offset;
-            self.renderY1 = self.height - offset;
-        }
-    }
-};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
@@ -102,17 +42,6 @@ pub fn main() !void {
 
     var window = try Window.init(800, 600);
     defer window.deinit();
-
-    // Could be moved to window struct
-    if (!c.SDL_SetWindowRelativeMouseMode(window.sdlWindow, true)) {
-        return error.CouldNotGrabMouse;
-    }
-    defer _ = c.SDL_SetWindowRelativeMouseMode(window.sdlWindow, false);
-
-    if (!c.SDL_SetWindowMouseGrab(window.sdlWindow, true)) {
-        return error.CouldNotGrabMouse;
-    }
-    defer _ = c.SDL_SetWindowMouseGrab(window.sdlWindow, false);
 
     // ===[ OpenGL init ]===
     const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(window.sdlWindow);
@@ -163,7 +92,7 @@ pub fn main() !void {
     gl.GenTextures(1, @ptrCast(&fbtexture));
     defer gl.DeleteTextures(1, @ptrCast(&fbtexture));
     gl.BindTexture(gl.TEXTURE_2D, fbtexture);
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, RENDERWIDTH, RENDERHEIGHT, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, Window.RENDERWIDTH, Window.RENDERHEIGHT, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.BindTexture(gl.TEXTURE_2D, 0);
@@ -177,7 +106,7 @@ pub fn main() !void {
     var rbo: c_uint = undefined;
     gl.GenRenderbuffers(1, @ptrCast(&rbo));
     gl.BindRenderbuffer(gl.RENDERBUFFER, rbo);
-    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, RENDERWIDTH, RENDERHEIGHT);
+    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, Window.RENDERWIDTH, Window.RENDERHEIGHT);
     gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
 
     gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo);
@@ -266,6 +195,8 @@ pub fn main() !void {
                         cameraDirection[1] =  1,
                     c.SDLK_LSHIFT =>
                         cameraDirection[1] = -1,
+                    c.SDLK_ESCAPE =>
+                        window.toggleMouseLocked() catch {},
                     else     => {},
                 },
                 c.SDL_EVENT_KEY_UP => switch(event.key.key) {
@@ -290,7 +221,9 @@ pub fn main() !void {
                     else     => {},
                 },
                 c.SDL_EVENT_MOUSE_MOTION => 
-                    camera.applyMouseMovement(event.motion.xrel, event.motion.yrel),
+                    if (window.mouse_locked) {
+                        camera.applyMouseMovement(event.motion.xrel, event.motion.yrel);
+                    },
                 c.SDL_EVENT_WINDOW_RESIZED => {
                     window.resize(event.window.data1, event.window.data2);
                 },
@@ -299,7 +232,7 @@ pub fn main() !void {
         }
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
-        gl.Viewport(0, 0, RENDERWIDTH, RENDERHEIGHT);
+        gl.Viewport(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT);
         gl.ClearColor(0.02, 0.02, 0.2, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -307,7 +240,7 @@ pub fn main() !void {
 
         const model = zm.Mat4f.translation(2.0, 0.0, -3.0);
         const view = camera.getViewMatrix();
-        const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), RENDERASPECTRATIO, 0.1, 100.0);
+        const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), Window.RENDERASPECTRATIO, 0.1, 100.0);
 
         const lightColor = zm.Vec3f {1.0, 1.0, 1.0};
         const lightAngle = std.math.degreesToRadians(timeFloat / 28.0);
@@ -359,7 +292,7 @@ pub fn main() !void {
         gl.Viewport(0, 0, window.width, window.height);
         
         // Could be replaced with rendering to a big triangle/quad
-        gl.BlitFramebuffer(0, 0, RENDERWIDTH, RENDERHEIGHT, window.renderX0, window.renderY0, window.renderX1, window.renderY1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.BlitFramebuffer(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT, window.renderX0, window.renderY0, window.renderX1, window.renderY1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
 
         _ = c.SDL_GL_SwapWindow(window.sdlWindow);
     }
