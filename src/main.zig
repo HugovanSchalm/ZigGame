@@ -10,8 +10,6 @@ const Model = @import("model.zig");
 const Window = @import("window.zig");
 const c = @import("c.zig").imports;
 
-var procs: gl.ProcTable = undefined;
-
 const VERTICES = [_]f32{
     //  VERTEX COORDS       TEXTURE COORDS  NORMALS
     -0.5, 0.5,  0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
@@ -36,13 +34,8 @@ pub fn main() !void {
 
     var window = try Window.init(800, 600);
     defer window.deinit();
-
-    // ===[ OpenGL init ]===
-    if (!procs.init(c.SDL_GL_GetProcAddress)) {
-        return error.CouldNotInitGL;
-    }
-
-    gl.makeProcTableCurrent(&procs);
+    // No idea why this needs to happen here as I also call this in the window init
+    gl.makeProcTableCurrent(&window.proctable);
     defer gl.makeProcTableCurrent(null);
 
     // ===[ OpenGL Settings ]===
@@ -72,39 +65,6 @@ pub fn main() !void {
     gl.EnableVertexAttribArray(1);
     gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
     gl.EnableVertexAttribArray(2);
-
-    var fbo: c_uint = undefined;
-    gl.GenFramebuffers(1, @ptrCast(&fbo));
-    defer gl.DeleteFramebuffers(1, @ptrCast(&fbo));
-    gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
-
-    var fbtexture: c_uint = undefined;
-    gl.GenTextures(1, @ptrCast(&fbtexture));
-    defer gl.DeleteTextures(1, @ptrCast(&fbtexture));
-    gl.BindTexture(gl.TEXTURE_2D, fbtexture);
-    gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, Window.RENDERWIDTH, Window.RENDERHEIGHT, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.BindTexture(gl.TEXTURE_2D, 0);
-
-    gl.FramebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fbtexture, 0);
-    const e = gl.GetError();
-    if (e != gl.NO_ERROR) {
-        try stdout.print("{d}\n", .{e});
-    }
-
-    var rbo: c_uint = undefined;
-    gl.GenRenderbuffers(1, @ptrCast(&rbo));
-    gl.BindRenderbuffer(gl.RENDERBUFFER, rbo);
-    gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, Window.RENDERWIDTH, Window.RENDERHEIGHT);
-    gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
-
-    gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo);
-
-    if (gl.CheckFramebufferStatus(gl.FRAMEBUFFER) != gl.FRAMEBUFFER_COMPLETE) {
-        return error.FrameBufferNotComplete;
-    }
-    gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 
     // ===[ Textures ]===
     gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
@@ -164,7 +124,7 @@ pub fn main() !void {
 
     var lasttime = c.SDL_GetTicks();
 
-    var clearColor = [_]f32{0.02, 0.02, 0.2};
+    var clearColor = [_]f32{ 0.02, 0.02, 0.2 };
 
     while (!done) {
         const curtime = c.SDL_GetTicks();
@@ -214,14 +174,14 @@ pub fn main() !void {
                     camera.applyMouseMovement(event.motion.xrel, event.motion.yrel);
                 },
                 c.SDL_EVENT_WINDOW_RESIZED => {
-                    window.resize(event.window.data1, event.window.data2);
+                    try window.resize(event.window.data1, event.window.data2);
                 },
                 else => {},
             }
         }
 
-        gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
-        gl.Viewport(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT);
+        window.framebuffer.bind();
+        gl.Viewport(0, 0, window.framebuffer.size.width, window.framebuffer.size.height);
         gl.ClearColor(clearColor[0], clearColor[1], clearColor[2], 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -229,7 +189,7 @@ pub fn main() !void {
 
         const model = zm.Mat4f.translation(2.0, 0.0, -3.0);
         const view = camera.getViewMatrix();
-        const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), Window.RENDERASPECTRATIO, 0.1, 100.0);
+        const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), window.size.aspectRatio, 0.1, 100.0);
 
         const lightColor = zm.Vec3f{ 1.0, 1.0, 1.0 };
         const lightAngle = std.math.degreesToRadians(timeFloat / 28.0);
@@ -287,13 +247,12 @@ pub fn main() !void {
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
-        gl.BindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
+        window.framebuffer.readBind();
         gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
-        gl.Viewport(0, 0, window.width, window.height);
-
+        gl.Viewport(0, 0, window.size.width, window.size.height);
 
         // Could be replaced with rendering to a big triangle/quad
-        gl.BlitFramebuffer(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT, window.renderX0, window.renderY0, window.renderX1, window.renderY1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.BlitFramebuffer(0, 0, window.framebuffer.size.width, window.framebuffer.size.height, 0, 0, window.size.width, window.size.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
 
         c.cImGui_ImplOpenGL3_RenderDrawData(c.ImGui_GetDrawData());
 
