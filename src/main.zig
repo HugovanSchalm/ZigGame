@@ -1,12 +1,6 @@
 const std = @import("std");
 const stdout = std.io.getStdOut().writer();
 const stderr = std.io.getStdErr().writer();
-const c = @cImport(
-    {
-        @cInclude("SDL3/SDL.h");
-        @cInclude("SDL3/SDL_main.h");
-    }
-);
 const gl = @import("gl");
 const zm = @import("zm");
 const zigimg = @import("zigimg");
@@ -14,29 +8,29 @@ const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 const Model = @import("model.zig");
 const Window = @import("window.zig");
+const c = @import("c.zig").imports;
 
 var procs: gl.ProcTable = undefined;
 
-const VERTICES = [_] f32 {
-//  VERTEX COORDS       TEXTURE COORDS  NORMALS
-    -0.5,   0.5, 0.0,   0.0, 1.0,       0.0, 0.0, 1.0,
-     0.5,   0.5, 0.0,   1.0, 1.0,       0.0, 0.0, 1.0,
-     0.5,  -0.5, 0.0,   1.0, 0.0,       0.0, 0.0, 1.0,
-    -0.5,  -0.5, 0.0,   0.0, 0.0,       0.0, 0.0, 1.0,
+const VERTICES = [_]f32{
+    //  VERTEX COORDS       TEXTURE COORDS  NORMALS
+    -0.5, 0.5,  0.0, 0.0, 1.0, 0.0, 0.0, 1.0,
+    0.5,  0.5,  0.0, 1.0, 1.0, 0.0, 0.0, 1.0,
+    0.5,  -0.5, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0,
+    -0.5, -0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0,
 };
 
-const INDICES = [_] u32 {
+const INDICES = [_]u32{
     0, 1, 2,
     0, 2, 3,
 };
-
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
     const allocator = gpa.allocator();
 
     // ===[ SDL and Windowing ]===
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO)) {
+    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_GAMEPAD)) {
         return error.CouldNotInitSDL;
     }
 
@@ -44,16 +38,12 @@ pub fn main() !void {
     defer window.deinit();
 
     // ===[ OpenGL init ]===
-    const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(window.sdlWindow);
-    defer _ = c.SDL_GL_DestroyContext(glContext);
-
     if (!procs.init(c.SDL_GL_GetProcAddress)) {
         return error.CouldNotInitGL;
     }
 
     gl.makeProcTableCurrent(&procs);
     defer gl.makeProcTableCurrent(null);
-
 
     // ===[ OpenGL Settings ]===
     gl.Enable(gl.DEPTH_TEST);
@@ -130,29 +120,19 @@ pub fn main() !void {
     {
         const exePath = try std.fs.selfExeDirPathAlloc(allocator);
         defer allocator.free(exePath);
-        const texturePath = try std.fs.path.join(allocator, &[_][]const u8{exePath, "/assets/textures/texture.png"});
+        const texturePath = try std.fs.path.join(allocator, &[_][]const u8{ exePath, "/assets/textures/texture.png" });
         defer allocator.free(texturePath);
         var textureImage = try zigimg.Image.fromFilePath(allocator, texturePath);
         defer textureImage.deinit();
         try textureImage.flipVertically();
-        gl.TexImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA,
-            @intCast(textureImage.width),
-            @intCast(textureImage.height),
-            0,
-            gl.RGB,
-            gl.UNSIGNED_BYTE,
-            textureImage.rawBytes().ptr
-        );
+        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, @intCast(textureImage.width), @intCast(textureImage.height), 0, gl.RGB, gl.UNSIGNED_BYTE, textureImage.rawBytes().ptr);
         gl.GenerateMipmap(gl.TEXTURE_2D);
     }
 
     gl.BindVertexArray(0);
 
     // ===[ Shaders ]===
-    const lightShader    = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
+    const lightShader = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
     const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
 
     // ===[ Models ]===
@@ -161,13 +141,30 @@ pub fn main() !void {
 
     var cube = try Model.cube(allocator);
     defer cube.deinit();
-    
+
+    // ===[ imgui setup ]===
+    _ = c.CIMGUI_CHECKVERSION();
+    _ = c.ImGui_CreateContext(null);
+    defer c.ImGui_DestroyContext(null);
+
+    const imio = c.ImGui_GetIO();
+    imio.*.ConfigFlags = c.ImGuiConfigFlags_NavEnableKeyboard;
+
+    c.ImGui_StyleColorsDark(null);
+
+    _ = c.cImGui_ImplSDL3_InitForOpenGL(window.sdlWindow, window.glContext);
+    defer c.cImGui_ImplSDL3_Shutdown();
+    _ = c.cImGui_ImplOpenGL3_Init();
+    defer c.cImGui_ImplOpenGL3_Shutdown();
+
     // ===[ Game Setup ]===
     var camera = Camera.init();
-    var cameraDirection = zm.Vec3f { 0.0, 0.0, 0.0 };
+    var cameraDirection = zm.Vec3f{ 0.0, 0.0, 0.0 };
     var done: bool = false;
 
     var lasttime = c.SDL_GetTicks();
+
+    var clearColor = [_]f32{0.02, 0.02, 0.2};
 
     while (!done) {
         const curtime = c.SDL_GetTicks();
@@ -178,28 +175,21 @@ pub fn main() !void {
 
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
+            _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
             switch (event.type) {
                 c.SDL_EVENT_QUIT => done = true,
                 c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
-                    c.SDLK_Q => 
-                        done = true,
-                    c.SDLK_W => 
-                        cameraDirection[2] =  1,
-                    c.SDLK_A => 
-                        cameraDirection[0] = -1,
-                    c.SDLK_S => 
-                        cameraDirection[2] = -1,
-                    c.SDLK_D => 
-                        cameraDirection[0] =  1,
-                    c.SDLK_SPACE =>
-                        cameraDirection[1] =  1,
-                    c.SDLK_LSHIFT =>
-                        cameraDirection[1] = -1,
-                    c.SDLK_ESCAPE =>
-                        window.toggleMouseLocked() catch {},
-                    else     => {},
+                    c.SDLK_Q => done = true,
+                    c.SDLK_W => cameraDirection[2] = 1,
+                    c.SDLK_A => cameraDirection[0] = -1,
+                    c.SDLK_S => cameraDirection[2] = -1,
+                    c.SDLK_D => cameraDirection[0] = 1,
+                    c.SDLK_SPACE => cameraDirection[1] = 1,
+                    c.SDLK_LSHIFT => cameraDirection[1] = -1,
+                    c.SDLK_ESCAPE => window.toggleMouseLocked() catch {},
+                    else => {},
                 },
-                c.SDL_EVENT_KEY_UP => switch(event.key.key) {
+                c.SDL_EVENT_KEY_UP => switch (event.key.key) {
                     c.SDLK_W => if (cameraDirection[2] == 1) {
                         cameraDirection[2] = 0;
                     },
@@ -218,22 +208,21 @@ pub fn main() !void {
                     c.SDLK_LSHIFT => if (cameraDirection[1] == -1) {
                         cameraDirection[1] = 0;
                     },
-                    else     => {},
+                    else => {},
                 },
-                c.SDL_EVENT_MOUSE_MOTION => 
-                    if (window.mouse_locked) {
-                        camera.applyMouseMovement(event.motion.xrel, event.motion.yrel);
-                    },
+                c.SDL_EVENT_MOUSE_MOTION => if (window.mouse_locked) {
+                    camera.applyMouseMovement(event.motion.xrel, event.motion.yrel);
+                },
                 c.SDL_EVENT_WINDOW_RESIZED => {
                     window.resize(event.window.data1, event.window.data2);
                 },
-                else => {}
+                else => {},
             }
         }
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, fbo);
         gl.Viewport(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT);
-        gl.ClearColor(0.02, 0.02, 0.2, 1.0);
+        gl.ClearColor(clearColor[0], clearColor[1], clearColor[2], 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         camera.move(cameraDirection, dt);
@@ -242,12 +231,12 @@ pub fn main() !void {
         const view = camera.getViewMatrix();
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), Window.RENDERASPECTRATIO, 0.1, 100.0);
 
-        const lightColor = zm.Vec3f {1.0, 1.0, 1.0};
+        const lightColor = zm.Vec3f{ 1.0, 1.0, 1.0 };
         const lightAngle = std.math.degreesToRadians(timeFloat / 28.0);
         const lightRadius = 5.0;
-        const lightPosVec = zm.Vec3f {std.math.cos(lightAngle) * lightRadius, 3.0, std.math.sin(lightAngle) * lightRadius};
+        const lightPosVec = zm.Vec3f{ std.math.cos(lightAngle) * lightRadius, 3.0, std.math.sin(lightAngle) * lightRadius };
         const lightPos = zm.Mat4f.translationVec3(lightPosVec);
-        const lightScale = zm.Mat4f.scalingVec3(.{0.2, 0.2, 0.2});
+        const lightScale = zm.Mat4f.scalingVec3(.{ 0.2, 0.2, 0.2 });
 
         const lightModel = lightPos.multiply(lightScale);
 
@@ -284,15 +273,29 @@ pub fn main() !void {
         suzanne.render();
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
+
+        c.cImGui_ImplOpenGL3_NewFrame();
+        c.cImGui_ImplSDL3_NewFrame();
+        c.ImGui_NewFrame();
+
+        c.ImGui_Text("Framerate: %f", imio.*.Framerate);
+        c.ImGui_Text("Frametime: %f", dt);
+        _ = c.ImGui_ColorPicker3("Background color", @ptrCast(&clearColor), c.ImGuiColorEditFlags_None);
+
+        c.ImGui_Render();
+
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT);
 
         gl.BindFramebuffer(gl.READ_FRAMEBUFFER, fbo);
         gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
         gl.Viewport(0, 0, window.width, window.height);
-        
+
+
         // Could be replaced with rendering to a big triangle/quad
         gl.BlitFramebuffer(0, 0, Window.RENDERWIDTH, Window.RENDERHEIGHT, window.renderX0, window.renderY0, window.renderX1, window.renderY1, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+
+        c.cImGui_ImplOpenGL3_RenderDrawData(c.ImGui_GetDrawData());
 
         _ = c.SDL_GL_SwapWindow(window.sdlWindow);
     }

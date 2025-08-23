@@ -1,9 +1,4 @@
-const c = @cImport(
-    {
-        @cInclude("SDL3/SDL.h");
-        @cInclude("SDL3/SDL_main.h");
-    }
-);
+const c = @import("c.zig").imports;
 
 pub const RENDERWIDTH = 512;
 pub const RENDERHEIGHT = 480;
@@ -11,6 +6,7 @@ pub const RENDERASPECTRATIO = @as(f32, @floatFromInt(RENDERWIDTH)) / @as(f32, @f
 
 const Window = struct {
     sdlWindow: *c.SDL_Window,
+    glContext: c.SDL_GLContext,
     width: i32 = 0,
     height: i32 = 0,
     renderX0: i32 = 0,
@@ -24,6 +20,7 @@ const Window = struct {
     pub fn deinit(self: *Window) void {
         self.setMouseLocked(false) catch {};
         c.SDL_DestroyWindow(self.sdlWindow);
+        defer _ = c.SDL_GL_DestroyContext(self.glContext);
     }
 
     pub fn resize(self: *Window, newWidth: i32, newHeight: i32) void {
@@ -75,12 +72,18 @@ pub fn init(width: i32, height: i32) !Window {
         "Videogame",
         width, 
         height, 
-        c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE
+        c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_FULLSCREEN
     ).?;
+
+    const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(sdlWindow).?;
 
     var window = Window {
         .sdlWindow = sdlWindow,
+        .glContext = glContext,
     };
+
+    _ = c.SDL_GL_MakeCurrent(sdlWindow, glContext);
+    _ = c.SDL_GL_SetSwapInterval(1);
 
     window.resize(width, height);
     try window.setMouseLocked(true);

@@ -52,6 +52,10 @@
             .url = "git+https://github.com/kooparse/zgltf.git#9c82e04aa0ff9418a29a588573b4aa5f83195fc6",
             .hash = "zgltf-0.1.0-sX6QAt0TAgDvPeZcAjqLu4ANd3QSaOx3QDsssykcLYiC",
         },
+        .cimgui_zig = .{
+            .url = "git+https://github.com/tiawl/cimgui.zig#7613777415be737330272ad7bd9ed7d8ae2d82cd",
+            .hash = "cimgui_zig-1.0.0-2XubknimVQBmbXYhhAxOTaxKCpN6v49Nj9ArsfCmSBBE",
+        },
     },
     .paths = .{
         "build.zig",

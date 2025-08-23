@@ -1,15 +1,11 @@
 const std = @import("std");
+const cimgui = @import("cimgui_zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const glbindings = @import("zigglgen").generateBindingsModule(b, .{
-        .api = .gl,
-        .version = .@"3.3",
-        .profile = .core,
-        .extensions = &.{}
-    });
+    const glbindings = @import("zigglgen").generateBindingsModule(b, .{ .api = .gl, .version = .@"3.3", .profile = .core, .extensions = &.{} });
 
     const zm = b.dependency("zm", .{
         .target = target,
@@ -26,12 +22,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const exe = b.addExecutable(.{
-        .name = "ZigGame",
-        .root_source_file = b.path("src/main.zig"),
+    const cimgui_dep = b.dependency("cimgui_zig", .{
+        .target = target,
         .optimize = optimize,
-        .target = target
+        .platform = cimgui.Platform.SDL3,
+        .renderer = cimgui.Renderer.OpenGL3,
     });
+
+    const exe = b.addExecutable(.{ .name = "ZigGame", .root_source_file = b.path("src/main.zig"), .optimize = optimize, .target = target });
 
     exe.linkLibC();
     exe.linkSystemLibrary("SDL3");
@@ -39,12 +37,13 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("zm", zm.module("zm"));
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
     exe.root_module.addImport("zgltf", zgltf.module("zgltf"));
+    exe.linkLibrary(cimgui_dep.artifact("cimgui"));
 
     b.installArtifact(exe);
 
     b.installDirectory(.{
         .source_dir = b.path("./assets"),
-        .install_dir = .{ .prefix = { } },
+        .install_dir = .{ .prefix = {} },
         .install_subdir = "bin/assets",
     });
 
