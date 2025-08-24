@@ -2,6 +2,8 @@ const std = @import("std");
 const zgltf = @import("zgltf");
 const gl = @import("gl");
 const zigimg = @import("zigimg");
+const Shader = @import("shader.zig").Shader;
+const c = @import("c.zig").imports;
 
 const Mesh = struct {
     vao: c_uint,
@@ -33,8 +35,10 @@ const Mesh = struct {
 
 pub const Model = struct {
     meshes: std.ArrayList(Mesh),
+    shader: *const Shader,
 
     pub fn render(self: Model) void {
+        self.shader.use();
         for (self.meshes.items) |mesh| {
             mesh.render();
         }
@@ -50,7 +54,7 @@ pub const Model = struct {
     }
 };
 
-pub fn cube(allocator: std.mem.Allocator) !Model {
+pub fn cube(allocator: std.mem.Allocator, shader: *const Shader) !Model {
     var vertices = [_]f32 {
 //       POSITIONS          TEXTURE COORDS       NORMALS
 //       FRONT
@@ -124,10 +128,11 @@ pub fn cube(allocator: std.mem.Allocator) !Model {
 
     return Model {
         .meshes = meshes,
+        .shader = shader,
     };
 }
 
-pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] const u8) !Model {
+pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] const u8, shader: *const Shader) !Model {
     // ===[ Parse files ]===
     const buffer = try std.fs.cwd().readFileAllocOptions(
         allocator,
@@ -171,6 +176,7 @@ pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] con
 
     return Model {
         .meshes = meshes,
+        .shader = shader,
     };
 }
 
@@ -183,6 +189,7 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
     defer texcoords.deinit();
 
     var normals: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
+    defer normals.deinit();
 
     var indices: std.ArrayList(u16) = std.ArrayList(u16).init(allocator);
     defer indices.deinit();
@@ -219,6 +226,7 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
             const imageInfo = gltf.data.images.items[source_index];
             const uri = imageInfo.uri.?;
             const texturePath = try std.fs.path.join(allocator, &[_][]const u8 {meshPath, uri});
+            defer allocator.free(texturePath);
             var imageFile = try std.fs.cwd().openFile(texturePath, .{});
             var image = try zigimg.Image.fromFile(allocator, &imageFile);
             defer image.deinit();
@@ -230,6 +238,7 @@ fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [
 
     // ===[ Combine into final vertex array ]===
     var vertices = try std.ArrayList(f32).initCapacity(allocator, vertexpositions.items.len / 3);
+    defer vertices.deinit();
 
     for (0..vertexpositions.items.len / 3, 0.., 0..) |vertexindex, texindex, normal_index| {
         try vertices.appendSlice(vertexpositions.items[3 * vertexindex..3 * vertexindex + 3]);

@@ -8,6 +8,7 @@ const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 const Model = @import("model.zig");
 const Window = @import("window.zig");
+const Object = @import("object.zig");
 const c = @import("c.zig").imports;
 
 const VERTICES = [_]f32{
@@ -26,6 +27,11 @@ const INDICES = [_]u32{
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
     const allocator = gpa.allocator();
+    defer {
+        if (gpa.deinit() == std.heap.Check.leak) {
+            stdout.print("Memory leak detected\n", .{}) catch {};
+        }
+    }
 
     // ===[ SDL and Windowing ]===
     if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_GAMEPAD)) {
@@ -96,11 +102,15 @@ pub fn main() !void {
     const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
 
     // ===[ Models ]===
-    var suzanne = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin");
-    defer suzanne.deinit();
+    var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
+    defer suzanneModel.deinit();
+    var suzanne = Object.Object {
+        .model = suzanneModel,
+        .transform = .{}
+    };
 
-    var cube = try Model.cube(allocator);
-    defer cube.deinit();
+    var cubeModel = try Model.cube(allocator, &lightShader);
+    defer cubeModel.deinit();
 
     // ===[ imgui setup ]===
     _ = c.CIMGUI_CHECKVERSION();
@@ -133,6 +143,10 @@ pub fn main() !void {
         var dt: f32 = @floatFromInt(curtime - lasttime);
         dt /= 1000.0;
         lasttime = curtime;
+
+        c.cImGui_ImplOpenGL3_NewFrame();
+        c.cImGui_ImplSDL3_NewFrame();
+        c.ImGui_NewFrame();
 
         var event: c.SDL_Event = undefined;
         while (c.SDL_PollEvent(&event)) {
@@ -203,11 +217,11 @@ pub fn main() !void {
 
         lightShader.use();
 
-        texturedShader.setMat4f("model", &lightModel);
-        texturedShader.setMat4f("view", &view);
-        texturedShader.setMat4f("projection", &projection);
+        lightShader.setMat4f("model", &lightModel);
+        lightShader.setMat4f("view", &view);
+        lightShader.setMat4f("projection", &projection);
 
-        cube.render();
+        cubeModel.render();
 
         texturedShader.use();
 
@@ -229,20 +243,11 @@ pub fn main() !void {
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
 
         texturedShader.use();
-        const suzannePos = zm.Mat4f.translation(-2.0, 0.0, -3.0);
-        const suzanneAngle: f32 = std.math.degreesToRadians(timeFloat / 42.0);
-        const suzanneRot = zm.Mat4f.rotation(zm.vec.up(f32), suzanneAngle);
-        const suzanneModel = suzannePos.multiply(suzanneRot);
-        texturedShader.setMat4f("model", &suzanneModel);
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
         suzanne.render();
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
-
-        c.cImGui_ImplOpenGL3_NewFrame();
-        c.cImGui_ImplSDL3_NewFrame();
-        c.ImGui_NewFrame();
 
         _ = c.ImGui_Begin("Game stuff", null, c.ImGuiWindowFlags_None);
 
