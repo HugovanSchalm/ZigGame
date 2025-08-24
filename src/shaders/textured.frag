@@ -1,6 +1,6 @@
 #version 330 core
 
-in vec2 outTexCoord;
+noperspective in vec2 outTexCoord;
 in vec4 vertLightColor;
 
 out vec4 outColor;
