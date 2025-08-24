@@ -125,6 +125,7 @@ pub fn main() !void {
     var lasttime = c.SDL_GetTicks();
 
     var clearColor = [_]f32{ 0.02, 0.02, 0.2 };
+    var snapVertices = true;
 
     while (!done) {
         const curtime = c.SDL_GetTicks();
@@ -218,8 +219,10 @@ pub fn main() !void {
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
 
-        const resolutionVector = zm.Vec2f{@as(f32, @floatFromInt(window.framebuffer.size.width)), @as(f32, @floatFromInt(window.framebuffer.size.height))};
+        const resolutionVector = zm.Vec2f{ @as(f32, @floatFromInt(window.framebuffer.size.width)), @as(f32, @floatFromInt(window.framebuffer.size.height)) };
         texturedShader.setVec2f("targetResolution", &resolutionVector);
+
+        texturedShader.setBool("snapVertices", snapVertices);
 
         gl.BindTexture(gl.TEXTURE_2D, texture);
         gl.BindVertexArray(vao);
@@ -241,10 +244,14 @@ pub fn main() !void {
         c.cImGui_ImplSDL3_NewFrame();
         c.ImGui_NewFrame();
 
+        _ = c.ImGui_Begin("Game stuff", null, c.ImGuiWindowFlags_None);
+
         c.ImGui_Text("Framerate: %f", imio.*.Framerate);
         c.ImGui_Text("Frametime: %f", dt);
         _ = c.ImGui_ColorPicker3("Background color", @ptrCast(&clearColor), c.ImGuiColorEditFlags_None);
+        _ = c.ImGui_Checkbox("Snap vertices", &snapVertices);
 
+        c.ImGui_End();
         c.ImGui_Render();
 
         gl.ClearColor(0.0, 0.0, 0.0, 1.0);

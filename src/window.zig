@@ -79,6 +79,7 @@ const Window = struct {
     proctable: gl.ProcTable = undefined,
     size: SurfaceSize,
     framebuffer: FrameBuffer,
+    minRenderSideSize: i32 = 240,
 
     mouse_locked: bool = false,
 

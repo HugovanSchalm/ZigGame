@@ -17,13 +17,19 @@ uniform float ambientStrength;
 
 uniform vec2 targetResolution;
 
+uniform bool snapVertices;
+
 void main() {
     vec2 grid = targetResolution * 0.5;
     vec4 vertInClipSpace = projection * view * model * vec4(inPosition, 1.0);
     vec4 snapped = vertInClipSpace;
-    snapped.xyz = vertInClipSpace.xyz / vertInClipSpace.w;
-    snapped.xy = floor(grid * snapped.xy) / grid;
-    snapped.xyz *= vertInClipSpace.w;
+
+    if (snapVertices) {
+        snapped.xyz = vertInClipSpace.xyz / vertInClipSpace.w;
+        snapped.xy = floor(grid * snapped.xy) / grid;
+        snapped.xyz *= vertInClipSpace.w;
+    }
+
     gl_Position = snapped;
 
     vec3 position = vec3(model * vec4(inPosition, 1.0));

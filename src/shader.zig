@@ -10,33 +10,38 @@ pub const Shader = struct {
         gl.UseProgram(self.id);
     }
 
-    pub fn setFloat(self: Shader, name: [*:0] const u8, value: f32) void {
+    pub fn setBool(self: Shader, name: [*:0]const u8, value: bool) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.Uniform1i(uniformLocation, if (value) 1 else 0);
+    }
+
+    pub fn setFloat(self: Shader, name: [*:0]const u8, value: f32) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.Uniform1f(uniformLocation, value);
     }
 
-    pub fn setVec2f(self: Shader, name: [*:0] const u8, value: * const zm.Vec2f) void {
+    pub fn setVec2f(self: Shader, name: [*:0]const u8, value: *const zm.Vec2f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.Uniform2fv(uniformLocation, 1, @ptrCast(value));
     }
 
-    pub fn setVec3f(self: Shader, name: [*:0] const u8, value: * const zm.Vec3f) void {
+    pub fn setVec3f(self: Shader, name: [*:0]const u8, value: *const zm.Vec3f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.Uniform3fv(uniformLocation, 1, @ptrCast(value));
     }
 
-    pub fn setMat4f(self: Shader, name: [*:0] const u8, value: * const zm.Mat4f) void {
+    pub fn setMat4f(self: Shader, name: [*:0]const u8, value: *const zm.Mat4f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.UniformMatrix4fv(uniformLocation, 1, gl.TRUE, @ptrCast(value));
     }
 };
 
-pub fn init(vertexSource: [] const u8, fragmentSource: [] const u8) !Shader {
+pub fn init(vertexSource: []const u8, fragmentSource: []const u8) !Shader {
     const programId = gl.CreateProgram();
 
-    var shaders = [_] c_uint { undefined, undefined };
-    const types = [_] c_uint { gl.VERTEX_SHADER, gl.FRAGMENT_SHADER };
-    const sources = [_][*] const u8 { vertexSource.ptr, fragmentSource.ptr };
+    var shaders = [_]c_uint{ undefined, undefined };
+    const types = [_]c_uint{ gl.VERTEX_SHADER, gl.FRAGMENT_SHADER };
+    const sources = [_][*]const u8{ vertexSource.ptr, fragmentSource.ptr };
 
     for (&shaders, types, sources) |*shader, shaderType, source| {
         shader.* = gl.CreateShader(shaderType);
@@ -71,7 +76,5 @@ pub fn init(vertexSource: [] const u8, fragmentSource: [] const u8) !Shader {
         return error.CouldNotLinkShader;
     }
 
-    return .{
-        .id = programId
-    };
+    return .{ .id = programId };
 }
