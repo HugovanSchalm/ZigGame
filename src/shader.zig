@@ -15,6 +15,11 @@ pub const Shader = struct {
         gl.Uniform1f(uniformLocation, value);
     }
 
+    pub fn setVec2f(self: Shader, name: [*:0] const u8, value: * const zm.Vec2f) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.Uniform2fv(uniformLocation, 1, @ptrCast(value));
+    }
+
     pub fn setVec3f(self: Shader, name: [*:0] const u8, value: * const zm.Vec3f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.Uniform3fv(uniformLocation, 1, @ptrCast(value));

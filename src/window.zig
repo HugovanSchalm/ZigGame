@@ -1,7 +1,7 @@
 const c = @import("c.zig").imports;
 const gl = @import("gl");
 
-const MINRENDERSIDESIZE = 300;
+const MINRENDERSIDESIZE = 240;
 
 const SurfaceSize = struct {
     width: i32,
@@ -86,6 +86,7 @@ const Window = struct {
         self.setMouseLocked(false) catch {};
         c.SDL_DestroyWindow(self.sdlWindow);
         _ = c.SDL_GL_DestroyContext(self.glContext);
+        gl.makeProcTableCurrent(null);
     }
 
     pub fn resize(self: *Window, newWidth: i32, newHeight: i32) !void {

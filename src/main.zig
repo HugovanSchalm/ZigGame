@@ -218,6 +218,9 @@ pub fn main() !void {
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
 
+        const resolutionVector = zm.Vec2f{@as(f32, @floatFromInt(window.framebuffer.size.width)), @as(f32, @floatFromInt(window.framebuffer.size.height))};
+        texturedShader.setVec2f("targetResolution", &resolutionVector);
+
         gl.BindTexture(gl.TEXTURE_2D, texture);
         gl.BindVertexArray(vao);
         gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
