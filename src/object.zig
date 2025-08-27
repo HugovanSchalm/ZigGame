@@ -3,6 +3,8 @@ const Model = @import("model.zig").Model;
 const zm = @import("zm");
 const c = @import("c.zig").imports;
 
+const ObjectID = u64;
+
 pub const Transform = struct {
     position: zm.Vec3f = zm.vec.zero(3, f32),
     rotation: zm.Quaternionf = zm.Quaternionf.identity(),
@@ -10,13 +12,16 @@ pub const Transform = struct {
 };
 
 pub const Object = struct {
-    model: Model,
+    id: ObjectID,
+    name: [:0]const u8,
+    model: *Model,
     transform: Transform = .{},
     showDebug: bool = true,
 
     pub fn render(self: *Object) void {
         if (self.showDebug) {
-            _ = c.ImGui_Begin("Object", &self.showDebug, c.ImGuiWindowFlags_None);
+            std.io.getStdOut().writer().print("{s}\n", .{self.name}) catch {};
+            _ = c.ImGui_Begin(@ptrCast(self.name), &self.showDebug, c.ImGuiWindowFlags_None);
             _ = c.ImGui_DragFloat3Ex(
                 "Position",
                 @ptrCast(&self.transform.position),
@@ -38,38 +43,55 @@ pub const Object = struct {
 };
 
 pub const ObjectManager = struct {
+    allocator: std.mem.Allocator,
     objects: std.AutoArrayHashMap(usize, Object),
 
     pub fn init(allocator: std.mem.Allocator) ObjectManager {
         const objects = std.AutoArrayHashMap(usize, Object).init(allocator);
-        return ObjectManager {
+        return ObjectManager{
+            .allocator = allocator,
             .objects = objects,
         };
     }
 
-    pub fn insert(self: *ObjectManager, model: Model) usize {
-        const S = struct {
-            var nextid: usize = 1;
-        };
+    pub fn deinit(self: *ObjectManager) void {
+        self.objects.deinit();
+    }
 
-        const object = Object {
-            .model = model,
+    pub fn createObject(self: *ObjectManager, model: *Model) !*Object {
+        const id = try self.insert(model);
+        return self.objects.getPtr(id).?;
+    }
+
+    pub fn insert(self: *ObjectManager, model: *Model) !u64 {
+        const S = struct {
+            var nextid: ObjectID = 1;
         };
 
         const id = S.nextid;
         S.nextid += 1;
-        self.objects.put(id, object);
+
+        const name = try std.fmt.allocPrintZ(self.allocator, "Object {d}", .{id});
+
+        const object = Object{
+            .id = id,
+            .name = name,
+            .model = model,
+        };
+
+        try self.objects.put(id, object);
 
         return id;
     }
 
-    pub fn get(self: ObjectManager, id: usize) ?*Object {
+    pub fn get(self: ObjectManager, id: ObjectID) ?*Object {
         return self.objects.getPtr(id);
     }
 
     pub fn renderAll(self: ObjectManager) void {
-        for (self.objects.items) |object| {
-            object.render();
+        var it = self.objects.iterator();
+        while (it.next()) |entry| {
+            entry.value_ptr.render();
         }
     }
 };
