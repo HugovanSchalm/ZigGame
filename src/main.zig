@@ -106,10 +106,10 @@ pub fn main() !void {
     defer om.deinit();
     var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
     defer suzanneModel.deinit();
-    const s1 = try om.insert(&suzanneModel);
+    const s1 = try om.create(&suzanneModel);
     om.get(s1).?.transform.position[1] = 4.0;
-    const s2 = try om.insert(&suzanneModel);
-    const s3 = try om.insert(&suzanneModel);
+    _ = try om.create(&suzanneModel);
+    _ = try om.create(&suzanneModel);
 
     var cubeModel = try Model.cube(allocator, &lightShader);
     defer cubeModel.deinit();
@@ -247,9 +247,7 @@ pub fn main() !void {
         texturedShader.use();
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
-        om.get(s1).?.render();
-        om.get(s2).?.render();
-        om.get(s3).?.render();
+        om.renderAll();
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 

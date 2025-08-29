@@ -12,6 +12,7 @@ pub const Transform = struct {
 };
 
 pub const Object = struct {
+    allocator: std.mem.Allocator,
     id: ObjectID,
     name: [:0]const u8,
     model: *Model,
@@ -20,13 +21,21 @@ pub const Object = struct {
 
     pub fn render(self: *Object) void {
         if (self.showDebug) {
-            std.io.getStdOut().writer().print("{s}\n", .{self.name}) catch {};
             _ = c.ImGui_Begin(@ptrCast(self.name), &self.showDebug, c.ImGuiWindowFlags_None);
             _ = c.ImGui_DragFloat3Ex(
                 "Position",
                 @ptrCast(&self.transform.position),
                 0.1,
                 -100.0,
+                100.0,
+                null,
+                c.ImGuiSliderFlags_None,
+            );
+            _ = c.ImGui_DragFloat3Ex(
+                "Scale",
+                @ptrCast(&self.transform.scale),
+                0.1,
+                0.1,
                 100.0,
                 null,
                 c.ImGuiSliderFlags_None,
@@ -39,6 +48,27 @@ pub const Object = struct {
         const modelMat = postionMat.multiply(rotationMat.multiply(scaleMat));
         self.model.shader.setMat4f("model", &modelMat);
         self.model.render();
+    }
+
+    fn init(allocator: std.mem.Allocator, model: *Model) !Object {
+        const S = struct {
+            var nextid: ObjectID = 1;
+        };
+        const id = S.nextid;
+        S.nextid += 1;
+
+        const name = try std.fmt.allocPrintZ(allocator, "Object {d}", .{id});
+
+        return Object{
+            .allocator = allocator,
+            .id = id,
+            .name = name,
+            .model = model,
+        };
+    }
+
+    fn deinit(self: *Object) void {
+        self.allocator.free(self.name);
     }
 };
 
@@ -55,33 +85,18 @@ pub const ObjectManager = struct {
     }
 
     pub fn deinit(self: *ObjectManager) void {
+        for (self.objects.values()) |*object| {
+            object.deinit();
+        }
         self.objects.deinit();
     }
 
-    pub fn createObject(self: *ObjectManager, model: *Model) !*Object {
-        const id = try self.insert(model);
-        return self.objects.getPtr(id).?;
-    }
+    ///Returns the id instead of a pointer as the object might move during execution
+    pub fn create(self: *ObjectManager, model: *Model) !u64 {
+        const object = try Object.init(self.allocator, model);
+        try self.objects.put(object.id, object);
 
-    pub fn insert(self: *ObjectManager, model: *Model) !u64 {
-        const S = struct {
-            var nextid: ObjectID = 1;
-        };
-
-        const id = S.nextid;
-        S.nextid += 1;
-
-        const name = try std.fmt.allocPrintZ(self.allocator, "Object {d}", .{id});
-
-        const object = Object{
-            .id = id,
-            .name = name,
-            .model = model,
-        };
-
-        try self.objects.put(id, object);
-
-        return id;
+        return object.id;
     }
 
     pub fn get(self: ObjectManager, id: ObjectID) ?*Object {
