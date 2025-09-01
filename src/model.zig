@@ -1,8 +1,8 @@
 const std = @import("std");
-const zgltf = @import("zgltf");
+const Gltf = @import("zgltf").Gltf;
 const gl = @import("gl");
-const zigimg = @import("zigimg");
 const Shader = @import("shader.zig").Shader;
+const sdl = @import("sdl3");
 const c = @import("c.zig").imports;
 
 const Mesh = struct {
@@ -11,11 +11,11 @@ const Mesh = struct {
     ebo: c_uint = 0,
     n_vertices: c_int,
     n_indices: c_int = 0,
-    texture: c_uint = 0,
+    texture: ?c_uint = 0,
 
     fn render(self: Mesh) void {
-        if (self.texture > 0) {
-            gl.BindTexture(gl.TEXTURE_2D, self.texture);
+        if (self.texture) |texture| {
+            gl.BindTexture(gl.TEXTURE_2D, texture);
         }
         gl.BindVertexArray(self.vao);
         if (self.n_indices > 0) {
@@ -34,6 +34,7 @@ const Mesh = struct {
 };
 
 pub const Model = struct {
+    allocator: std.mem.Allocator,
     meshes: std.ArrayList(Mesh),
     shader: *const Shader,
 
@@ -50,7 +51,7 @@ pub const Model = struct {
             var mesh = &self.meshes.items[i];
             mesh.deinit();
         }
-        self.meshes.deinit();
+        self.meshes.deinit(self.allocator);
     }
 };
 
@@ -118,7 +119,7 @@ pub fn cube(allocator: std.mem.Allocator, shader: *const Shader) !Model {
     gl.BindVertexArray(0);
 
     var meshes = try std.ArrayList(Mesh).initCapacity(allocator, 1);
-    try meshes.append(.{
+    try meshes.append(allocator, .{
         .vao = vao,
         .vbo = vbo,
         .ebo = ebo,
@@ -127,6 +128,7 @@ pub fn cube(allocator: std.mem.Allocator, shader: *const Shader) !Model {
     });
 
     return Model {
+        .allocator = allocator,
         .meshes = meshes,
         .shader = shader,
     };
@@ -139,7 +141,7 @@ pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] con
         gltfPath,
         512_000,
         null,
-        4,
+        std.mem.Alignment.@"4",
         null,
     );
     defer allocator.free(buffer);
@@ -149,20 +151,20 @@ pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] con
         binPath,
         512_000,
         null,
-        4,
+        std.mem.Alignment.@"4",
         null
     );
     defer allocator.free(bin);
 
-    var gltf = zgltf.init(allocator);
+    var gltf = Gltf.init(allocator);
     defer gltf.deinit();
 
     try gltf.parse(buffer);
 
-    var meshes = std.ArrayList(Mesh).init(allocator);
+    var meshes = std.ArrayList(Mesh){};
 
     // ===[ Gather Vertices ]===
-    for (gltf.data.meshes.items) |mesh| {
+    for (gltf.data.meshes) |mesh| {
         const dirPath = std.fs.path.dirname(gltfPath).?;
         const parsedMesh = try parseMesh(
             allocator,
@@ -171,79 +173,80 @@ pub fn init(allocator: std.mem.Allocator, gltfPath: [] const u8, binPath: [] con
             bin,
             dirPath,
         );
-        try meshes.append(parsedMesh);
+        try meshes.append(allocator, parsedMesh);
     }
 
     return Model {
+        .allocator = allocator,
         .meshes = meshes,
         .shader = shader,
     };
 }
 
-fn parseMesh(allocator: std.mem.Allocator, mesh: zgltf.Mesh, gltf: zgltf, bin: [] const u8, meshPath: [] const u8) !Mesh {
+fn parseMesh(allocator: std.mem.Allocator, mesh: Gltf.Mesh, gltf: Gltf, bin: [] const u8, meshPath: [] const u8) !Mesh {
     // ===[ Initialization ]===
-    var vertexpositions: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
-    defer vertexpositions.deinit();
+    var vertexpositions: std.ArrayList(f32) = std.ArrayList(f32) {};
+    defer vertexpositions.deinit(allocator);
 
-    var texcoords: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
-    defer texcoords.deinit();
+    var texcoords: std.ArrayList(f32) = std.ArrayList(f32) {};
+    defer texcoords.deinit(allocator);
 
-    var normals: std.ArrayList(f32) = std.ArrayList(f32).init(allocator);
-    defer normals.deinit();
+    var normals: std.ArrayList(f32) = std.ArrayList(f32) {};
+    defer normals.deinit(allocator);
 
-    var indices: std.ArrayList(u16) = std.ArrayList(u16).init(allocator);
-    defer indices.deinit();
+    var indices: std.ArrayList(u16) = std.ArrayList(u16) {};
+    defer indices.deinit(allocator);
 
-    var texture: c_uint = 0;
+    var texture: ?c_uint = undefined;
 
     // ===[ Parse all primitives ]===
-    for (mesh.primitives.items) |primitive| {
-        for (primitive.attributes.items) |attribute| {
+    for (mesh.primitives) |primitive| {
+        for (primitive.attributes) |attribute| {
             switch (attribute) {
                 .position => |accessor_index| {
-                    const accessor = gltf.data.accessors.items[accessor_index];
-                    gltf.getDataFromBufferView(f32, &vertexpositions, accessor, bin);
+                    const accessor = gltf.data.accessors[accessor_index];
+                    gltf.getDataFromBufferView(f32, &vertexpositions, allocator, accessor, bin);
                 },
                 .texcoord => |accessor_index| {
-                    const accessor = gltf.data.accessors.items[accessor_index];
-                    gltf.getDataFromBufferView(f32, &texcoords, accessor, bin);
+                    const accessor = gltf.data.accessors[accessor_index];
+                    gltf.getDataFromBufferView(f32, &texcoords, allocator, accessor, bin);
                 },
                 .normal => |normal_index| {
-                    const accessor = gltf.data.accessors.items[normal_index];
-                    gltf.getDataFromBufferView(f32, &normals, accessor, bin);
+                    const accessor = gltf.data.accessors[normal_index];
+                    gltf.getDataFromBufferView(f32, &normals, allocator, accessor, bin);
                 },
                 else => {}
             }
         }
         if (primitive.indices) |indices_index| {
-            const accessor = gltf.data.accessors.items[indices_index];
-            gltf.getDataFromBufferView(u16, &indices, accessor, bin);
+            const accessor = gltf.data.accessors[indices_index];
+            gltf.getDataFromBufferView(u16, &indices, allocator, accessor, bin);
         }
         if (primitive.material) |material_index| {
-            const material = gltf.data.materials.items[material_index];
+            const material = gltf.data.materials[material_index];
             const texture_index = material.metallic_roughness.base_color_texture.?.index;
-            const source_index = gltf.data.textures.items[texture_index].source.?;
-            const imageInfo = gltf.data.images.items[source_index];
+            const source_index = gltf.data.textures[texture_index].source.?;
+            const imageInfo = gltf.data.images[source_index];
             const uri = imageInfo.uri.?;
-            const texturePath = try std.fs.path.join(allocator, &[_][]const u8 {meshPath, uri});
+            const texturePath = try std.fs.path.joinZ(allocator, &[_][]const u8 {meshPath, uri});
             defer allocator.free(texturePath);
-            var imageFile = try std.fs.cwd().openFile(texturePath, .{});
-            var image = try zigimg.Image.fromFile(allocator, &imageFile);
+            var image = try sdl.image.loadFile(texturePath);
             defer image.deinit();
-            const width: c_int = @intCast(image.width);
-            const height: c_int = @intCast(image.height);
-            texture = createTexture(width, height, image.rawBytes());
+            image = try image.convertFormat(.array_rgb_24);
+            const width: c_int = @intCast(image.getWidth());
+            const height: c_int = @intCast(image.getHeight());
+            texture = createTexture(width, height, image.getPixels().?);
         }
     }
 
     // ===[ Combine into final vertex array ]===
     var vertices = try std.ArrayList(f32).initCapacity(allocator, vertexpositions.items.len / 3);
-    defer vertices.deinit();
+    defer vertices.deinit(allocator);
 
     for (0..vertexpositions.items.len / 3, 0.., 0..) |vertexindex, texindex, normal_index| {
-        try vertices.appendSlice(vertexpositions.items[3 * vertexindex..3 * vertexindex + 3]);
-        try vertices.appendSlice(texcoords.items[2 * texindex..2 * texindex + 2]);
-        try vertices.appendSlice(normals.items[3 * normal_index..3 * normal_index + 3]);
+        try vertices.appendSlice(allocator, vertexpositions.items[3 * vertexindex..3 * vertexindex + 3]);
+        try vertices.appendSlice(allocator, texcoords.items[2 * texindex..2 * texindex + 2]);
+        try vertices.appendSlice(allocator, normals.items[3 * normal_index..3 * normal_index + 3]);
     }
 
     // ===[ Initialize OpenGL vars ]===

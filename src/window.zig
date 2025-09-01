@@ -1,11 +1,11 @@
-const c = @import("c.zig").imports;
+const sdl = @import("sdl3");
 const gl = @import("gl");
 
 const MINRENDERSIDESIZE = 240;
 
 const SurfaceSize = struct {
-    width: i32,
-    height: i32,
+    width: usize,
+    height: usize,
     aspectRatio: f32,
 };
 
@@ -24,7 +24,7 @@ const FrameBuffer = struct {
         var fbtexture: c_uint = undefined;
         gl.GenTextures(1, @ptrCast(&fbtexture));
         gl.BindTexture(gl.TEXTURE_2D, fbtexture);
-        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, size.width, size.height, 0, gl.RGB, gl.UNSIGNED_BYTE, null);
+        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(size.width), @intCast(size.height), 0, gl.RGB, gl.UNSIGNED_BYTE, null);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.BindTexture(gl.TEXTURE_2D, 0);
@@ -34,7 +34,7 @@ const FrameBuffer = struct {
         var rbo: c_uint = undefined;
         gl.GenRenderbuffers(1, @ptrCast(&rbo));
         gl.BindRenderbuffer(gl.RENDERBUFFER, rbo);
-        gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, size.width, size.height);
+        gl.RenderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, @intCast(size.width), @intCast(size.height));
         gl.BindRenderbuffer(gl.RENDERBUFFER, 0);
 
         gl.FramebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rbo);
@@ -74,8 +74,8 @@ const FrameBuffer = struct {
 };
 
 const Window = struct {
-    sdlWindow: *c.SDL_Window,
-    glContext: c.SDL_GLContext,
+    sdlWindow: sdl.video.Window,
+    glContext: sdl.video.gl.Context,
     proctable: gl.ProcTable = undefined,
     size: SurfaceSize,
     framebuffer: FrameBuffer,
@@ -85,28 +85,24 @@ const Window = struct {
 
     pub fn deinit(self: *Window) void {
         self.setMouseLocked(false) catch {};
-        c.SDL_DestroyWindow(self.sdlWindow);
-        _ = c.SDL_GL_DestroyContext(self.glContext);
+        self.sdlWindow.deinit();
+        self.glContext.deinit() catch {};
         gl.makeProcTableCurrent(null);
     }
 
     pub fn resize(self: *Window, newWidth: i32, newHeight: i32) !void {
-        self.size.width = newWidth;
-        self.size.height = newHeight;
-        self.size.aspectRatio = calcAspectRatio(newWidth, newHeight);
+        const width: usize = @intCast(newWidth);
+        const height: usize = @intCast(newHeight);
+        self.size.width = @intCast(width);
+        self.size.height = @intCast(height);
+        self.size.aspectRatio = calcAspectRatio(width, height);
         self.framebuffer.deinit();
         self.framebuffer = try FrameBuffer.init(calcFrameBufferSize(self.size));
     }
 
     fn setMouseLocked(self: *Window, value: bool) !void {
-        if (!c.SDL_SetWindowRelativeMouseMode(self.sdlWindow, value)) {
-            return error.CouldNotSetMouseMode;
-        }
-
-        if (!c.SDL_SetWindowMouseGrab(self.sdlWindow, value)) {
-            return error.CouldNotSetMouseGrab;
-        }
-
+        try sdl.mouse.setWindowGrab(self.sdlWindow, value);
+        try sdl.mouse.setWindowRelativeMode(self.sdlWindow, value);
         self.mouse_locked = value;
     }
 
@@ -115,17 +111,17 @@ const Window = struct {
     }
 };
 
-fn calcAspectRatio(width: i32, height: i32) f32 {
+fn calcAspectRatio(width: usize, height: usize) f32 {
     return @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
 }
 
 fn calcFrameBufferSize(windowSize: SurfaceSize) SurfaceSize {
-    const width: i32 = 
+    const width: usize = 
         if (windowSize.width <= windowSize.height)
             MINRENDERSIDESIZE
         else
             @intFromFloat(@as(f32, @floatFromInt(MINRENDERSIDESIZE)) * windowSize.aspectRatio);
-    const height: i32 = 
+    const height: usize = 
         if (windowSize.width > windowSize.height)
             MINRENDERSIDESIZE
         else
@@ -138,13 +134,25 @@ fn calcFrameBufferSize(windowSize: SurfaceSize) SurfaceSize {
     };
 }
 
-pub fn init(width: i32, height: i32) !Window {
-    const sdlWindow: *c.SDL_Window = c.SDL_CreateWindow("Videogame", width, height, c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_FULLSCREEN).?;
+pub fn init(width: usize, height: usize) !Window {
+    const sdlWindow = try sdl.video.Window.init(
+        "Videogame",
+        width,
+        height,
+        .{
+            .open_gl = true,
+            .resizable = true,
+            .fullscreen = true,
+        }
+    );
 
-    const glContext: c.SDL_GLContext = c.SDL_GL_CreateContext(sdlWindow).?;
+    const glContext = try sdl.video.gl.Context.init(sdlWindow);
+    try glContext.makeCurrent(sdlWindow);
+    try sdl.video.gl.setSwapInterval(.vsync);
+
 
     var procs: gl.ProcTable = undefined;
-    if (!procs.init(c.SDL_GL_GetProcAddress)) {
+    if (!procs.init(sdl.c.SDL_GL_GetProcAddress)) {
         return error.CouldNotInitGL;
     }
 
@@ -156,12 +164,8 @@ pub fn init(width: i32, height: i32) !Window {
         .aspectRatio = calcAspectRatio(width, height),
     };
 
-
     const fbsize = calcFrameBufferSize(windowSize);
     const framebuffer = try FrameBuffer.init(fbsize);
-
-    _ = c.SDL_GL_MakeCurrent(sdlWindow, glContext);
-    _ = c.SDL_GL_SetSwapInterval(1);
 
     var window = Window{
         .sdlWindow = sdlWindow,

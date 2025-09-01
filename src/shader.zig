@@ -1,5 +1,4 @@
 const std = @import("std");
-const stderr = std.io.getStdErr().writer();
 const gl = @import("gl");
 const zm = @import("zm");
 
@@ -49,12 +48,12 @@ pub fn init(vertexSource: []const u8, fragmentSource: []const u8) !Shader {
         gl.CompileShader(shader.*);
 
         var success: c_int = undefined;
-        gl.GetShaderiv(shader.*, gl.COMPILE_STATUS, &success);
+        gl.GetShaderiv(shader.*, gl.COMPILE_STATUS, @ptrCast(&success));
 
         if (success == 0) {
             var infoLog: [512]u8 = undefined;
             gl.GetShaderInfoLog(shader.*, 512, null, &infoLog);
-            try stderr.print("{s}\n", .{infoLog});
+            // try stderr.print("{s}\n", .{infoLog});
             return error.CouldNotCompileShader;
         }
 
@@ -68,11 +67,11 @@ pub fn init(vertexSource: []const u8, fragmentSource: []const u8) !Shader {
     }
 
     var success: c_int = undefined;
-    gl.GetProgramiv(programId, gl.LINK_STATUS, &success);
+    gl.GetProgramiv(programId, gl.LINK_STATUS, @ptrCast(&success));
     if (success == 0) {
         var infoLog: [512]u8 = undefined;
         gl.GetProgramInfoLog(programId, 512, null, &infoLog);
-        try stderr.print("{s}\n", .{infoLog});
+        // try stderr.print("{s}\n", .{infoLog});
         return error.CouldNotLinkShader;
     }
 

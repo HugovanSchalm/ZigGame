@@ -1,14 +1,12 @@
 const std = @import("std");
-const stdout = std.io.getStdOut().writer();
-const stderr = std.io.getStdErr().writer();
 const gl = @import("gl");
 const zm = @import("zm");
-const zigimg = @import("zigimg");
 const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 const Model = @import("model.zig");
 const Window = @import("window.zig");
 const Object = @import("object.zig");
+const sdl = @import("sdl3");
 const c = @import("c.zig").imports;
 
 const VERTICES = [_]f32{
@@ -25,18 +23,14 @@ const INDICES = [_]u32{
 };
 
 pub fn main() !void {
+    defer sdl.shutdown();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
     const allocator = gpa.allocator();
-    defer {
-        if (gpa.deinit() == std.heap.Check.leak) {
-            stdout.print("Memory leak detected\n", .{}) catch {};
-        }
-    }
+    defer _ = gpa.deinit();
 
     // ===[ SDL and Windowing ]===
-    if (!c.SDL_Init(c.SDL_INIT_VIDEO | c.SDL_INIT_GAMEPAD)) {
-        return error.CouldNotInitSDL;
-    }
+    try sdl.init(.{ .video = true });
 
     var window = try Window.init(800, 600);
     defer window.deinit();
@@ -88,11 +82,11 @@ pub fn main() !void {
         defer allocator.free(exePath);
         const texturePath = try std.fs.path.join(allocator, &[_][]const u8{ exePath, "/assets/textures/texture.png" });
         defer allocator.free(texturePath);
-        var textureImage = try zigimg.Image.fromFilePath(allocator, texturePath);
-        defer textureImage.deinit();
-        try textureImage.flipVertically();
-        gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, @intCast(textureImage.width), @intCast(textureImage.height), 0, gl.RGB, gl.UNSIGNED_BYTE, textureImage.rawBytes().ptr);
-        gl.GenerateMipmap(gl.TEXTURE_2D);
+        // var textureImage = try zigimg.Image.fromFilePath(allocator, texturePath);
+        // defer textureImage.deinit();
+        // try textureImage.flipVertically();
+        // gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, @intCast(textureImage.width), @intCast(textureImage.height), 0, gl.RGB, gl.UNSIGNED_BYTE, textureImage.rawBytes().ptr);
+        // gl.GenerateMipmap(gl.TEXTURE_2D);
     }
 
     gl.BindVertexArray(0);
@@ -124,7 +118,7 @@ pub fn main() !void {
 
     c.ImGui_StyleColorsDark(null);
 
-    _ = c.cImGui_ImplSDL3_InitForOpenGL(window.sdlWindow, window.glContext);
+    _ = c.cImGui_ImplSDL3_InitForOpenGL(@ptrCast(window.sdlWindow.value), @ptrCast(window.glContext.value));
     defer c.cImGui_ImplSDL3_Shutdown();
     _ = c.cImGui_ImplOpenGL3_Init();
     defer c.cImGui_ImplOpenGL3_Shutdown();
@@ -134,13 +128,13 @@ pub fn main() !void {
     var cameraDirection = zm.Vec3f{ 0.0, 0.0, 0.0 };
     var done: bool = false;
 
-    var lasttime = c.SDL_GetTicks();
+    var lasttime = sdl.timer.getMillisecondsSinceInit();
 
     var clearColor = [_]f32{ 0.02, 0.02, 0.2 };
     var snapVertices = true;
 
     while (!done) {
-        const curtime = c.SDL_GetTicks();
+        const curtime = sdl.timer.getMillisecondsSinceInit();
         const timeFloat: f32 = @floatFromInt(curtime);
         var dt: f32 = @floatFromInt(curtime - lasttime);
         dt /= 1000.0;
@@ -150,55 +144,54 @@ pub fn main() !void {
         c.cImGui_ImplSDL3_NewFrame();
         c.ImGui_NewFrame();
 
-        var event: c.SDL_Event = undefined;
-        while (c.SDL_PollEvent(&event)) {
-            _ = c.cImGui_ImplSDL3_ProcessEvent(&event);
-            switch (event.type) {
-                c.SDL_EVENT_QUIT => done = true,
-                c.SDL_EVENT_KEY_DOWN => switch (event.key.key) {
-                    c.SDLK_Q => done = true,
-                    c.SDLK_W => cameraDirection[2] = 1,
-                    c.SDLK_A => cameraDirection[0] = -1,
-                    c.SDLK_S => cameraDirection[2] = -1,
-                    c.SDLK_D => cameraDirection[0] = 1,
-                    c.SDLK_SPACE => cameraDirection[1] = 1,
-                    c.SDLK_LSHIFT => cameraDirection[1] = -1,
-                    c.SDLK_ESCAPE => window.toggleMouseLocked() catch {},
+        while (sdl.events.poll()) |event| {
+            _ = c.cImGui_ImplSDL3_ProcessEvent(@ptrCast(&event.toSdl()));
+            switch (event) {
+                .quit => done = true,
+                .key_down => |key_event| switch (key_event.key.?) {
+                    .q => done = true,
+                    .w => cameraDirection[2] = 1,
+                    .a => cameraDirection[0] = -1,
+                    .s => cameraDirection[2] = -1,
+                    .d => cameraDirection[0] = 1,
+                    .space => cameraDirection[1] = 1,
+                    .left_shift => cameraDirection[1] = -1,
+                    .escape => window.toggleMouseLocked() catch {},
                     else => {},
                 },
-                c.SDL_EVENT_KEY_UP => switch (event.key.key) {
-                    c.SDLK_W => if (cameraDirection[2] == 1) {
+                .key_up => |key_event| switch (key_event.key.?) {
+                    .w => if (cameraDirection[2] == 1) {
                         cameraDirection[2] = 0;
                     },
-                    c.SDLK_A => if (cameraDirection[0] == -1) {
+                    .a => if (cameraDirection[0] == -1) {
                         cameraDirection[0] = 0;
                     },
-                    c.SDLK_S => if (cameraDirection[2] == -1) {
+                    .s => if (cameraDirection[2] == -1) {
                         cameraDirection[2] = 0;
                     },
-                    c.SDLK_D => if (cameraDirection[0] == 1) {
+                    .d => if (cameraDirection[0] == 1) {
                         cameraDirection[0] = 0;
                     },
-                    c.SDLK_SPACE => if (cameraDirection[1] == 1) {
+                    .space => if (cameraDirection[1] == 1) {
                         cameraDirection[1] = 0;
                     },
-                    c.SDLK_LSHIFT => if (cameraDirection[1] == -1) {
+                    .left_shift => if (cameraDirection[1] == -1) {
                         cameraDirection[1] = 0;
                     },
                     else => {},
                 },
-                c.SDL_EVENT_MOUSE_MOTION => if (window.mouse_locked) {
-                    camera.applyMouseMovement(event.motion.xrel, event.motion.yrel);
+                .mouse_motion => |motion| if (window.mouse_locked) {
+                    camera.applyMouseMovement(motion.x_rel, motion.y_rel);
                 },
-                c.SDL_EVENT_WINDOW_RESIZED => {
-                    try window.resize(event.window.data1, event.window.data2);
+                .window_resized => |resize| {
+                    try window.resize(resize.width, resize.height);
                 },
                 else => {},
             }
         }
 
         window.framebuffer.bind();
-        gl.Viewport(0, 0, window.framebuffer.size.width, window.framebuffer.size.height);
+        gl.Viewport(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height));
         gl.ClearColor(clearColor[0], clearColor[1], clearColor[2], 1.0);
         gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -266,13 +259,13 @@ pub fn main() !void {
 
         window.framebuffer.readBind();
         gl.BindFramebuffer(gl.DRAW_FRAMEBUFFER, 0);
-        gl.Viewport(0, 0, window.size.width, window.size.height);
+        gl.Viewport(0, 0, @intCast(window.size.width), @intCast(window.size.height));
 
         // Could be replaced with rendering to a big triangle/quad
-        gl.BlitFramebuffer(0, 0, window.framebuffer.size.width, window.framebuffer.size.height, 0, 0, window.size.width, window.size.height, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+        gl.BlitFramebuffer(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height), 0, 0, @intCast(window.size.width), @intCast(window.size.height), gl.COLOR_BUFFER_BIT, gl.NEAREST);
 
         c.cImGui_ImplOpenGL3_RenderDrawData(c.ImGui_GetDrawData());
 
-        _ = c.SDL_GL_SwapWindow(window.sdlWindow);
+        try sdl.video.gl.swapWindow(window.sdlWindow);
     }
 }

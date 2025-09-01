@@ -57,7 +57,7 @@ pub const Object = struct {
         const id = S.nextid;
         S.nextid += 1;
 
-        const name = try std.fmt.allocPrintZ(allocator, "Object {d}", .{id});
+        const name = try std.fmt.allocPrintSentinel(allocator, "Object {d}", .{id}, 0);
 
         return Object{
             .allocator = allocator,

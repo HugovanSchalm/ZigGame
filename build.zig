@@ -12,11 +12,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zigimg_dependency = b.dependency("zigimg", .{
-        .target = target,
-        .optimize = optimize,
-    });
-
     const zgltf = b.dependency("zgltf", .{
         .target = target,
         .optimize = optimize,
@@ -29,14 +24,28 @@ pub fn build(b: *std.Build) void {
         .renderer = cimgui.Renderer.OpenGL3,
     });
 
-    const exe = b.addExecutable(.{ .name = "ZigGame", .root_source_file = b.path("src/main.zig"), .optimize = optimize, .target = target });
+    const sdl3 = b.dependency("sdl3", .{
+        .target = target,
+        .optimize = optimize,
+        .ext_image = true,
+        .image_enable_png = true,
+    });
+
+    const exe = b.addExecutable(.{ 
+        .name = "ZigGame", 
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) 
+    });
 
     exe.linkLibC();
     exe.linkSystemLibrary("SDL3");
     exe.root_module.addImport("gl", glbindings);
     exe.root_module.addImport("zm", zm.module("zm"));
-    exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
     exe.root_module.addImport("zgltf", zgltf.module("zgltf"));
+    exe.root_module.addImport("sdl3", sdl3.module("sdl3"));
     exe.linkLibrary(cimgui_dep.artifact("cimgui"));
 
     b.installArtifact(exe);
