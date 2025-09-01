@@ -7,7 +7,8 @@ const ObjectID = u64;
 
 pub const Transform = struct {
     position: zm.Vec3f = zm.vec.zero(3, f32),
-    rotation: zm.Quaternionf = zm.Quaternionf.identity(),
+    rotationQuat: zm.Quaternionf = zm.Quaternionf.identity(),
+    rotationAngle: zm.Vec3f = zm.vec.zero(3, f32),
     scale: zm.Vec3f = zm.Vec3f{ 1.0, 1.0, 1.0 },
 };
 
@@ -40,10 +41,23 @@ pub const Object = struct {
                 null,
                 c.ImGuiSliderFlags_None,
             );
+            _ = c.ImGui_DragFloat3Ex(
+                "rotation",
+                @ptrCast(&self.transform.rotationAngle),
+                1.0,
+                0.0,
+                360.0,
+                null,
+                c.ImGuiSliderFlags_WrapAround,
+            );
+            self.transform.rotationQuat = 
+                zm.Quaternionf.fromAxisAngle(zm.vec.forward(f32), std.math.degreesToRadians(self.transform.rotationAngle[0]))
+                .multiply(zm.Quaternionf.fromAxisAngle(zm.vec.up(f32), std.math.degreesToRadians(self.transform.rotationAngle[1])))
+                .multiply(zm.Quaternionf.fromAxisAngle(zm.vec.right(f32), std.math.degreesToRadians(self.transform.rotationAngle[2]))).conjugate();
             c.ImGui_End();
         }
         const postionMat = zm.Mat4f.translationVec3(self.transform.position);
-        const rotationMat = zm.Mat4f.fromQuaternion(self.transform.rotation);
+        const rotationMat = zm.Mat4f.fromQuaternion(self.transform.rotationQuat);
         const scaleMat = zm.Mat4f.scalingVec3(self.transform.scale);
         const modelMat = postionMat.multiply(rotationMat.multiply(scaleMat));
         self.model.shader.setMat4f("model", &modelMat);
