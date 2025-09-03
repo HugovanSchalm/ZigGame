@@ -6,6 +6,7 @@ const Camera = @import("camera.zig");
 const Model = @import("model.zig");
 const Window = @import("window.zig");
 const Object = @import("object.zig");
+const physics = @import("physics.zig");
 const sdl = @import("sdl3");
 const c = @import("c.zig").imports;
 
@@ -101,6 +102,9 @@ pub fn main() !void {
     var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
     defer suzanneModel.deinit();
     const s1 = try om.create(&suzanneModel);
+
+    var s1physics: physics.PhysicsBody  = .{};
+
     om.get(s1).?.transform.position[1] = 4.0;
     _ = try om.create(&suzanneModel);
     _ = try om.create(&suzanneModel);
@@ -189,6 +193,9 @@ pub fn main() !void {
                 else => {},
             }
         }
+
+        s1physics.applyGravity(dt);
+        s1physics.applyVelocity(om.get(s1).?);
 
         window.framebuffer.bind();
         gl.Viewport(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height));
