@@ -140,8 +140,7 @@ pub fn main() !void {
     while (!done) {
         const curtime = sdl.timer.getMillisecondsSinceInit();
         const timeFloat: f32 = @floatFromInt(curtime);
-        var dt: f32 = @floatFromInt(curtime - lasttime);
-        dt /= 1000.0;
+        const dt: f32 = @as(f32, @floatFromInt(curtime - lasttime)) / 1000.0;
         lasttime = curtime;
 
         c.cImGui_ImplOpenGL3_NewFrame();
@@ -195,7 +194,7 @@ pub fn main() !void {
         }
 
         s1physics.applyGravity(dt);
-        s1physics.applyVelocity(om.get(s1).?);
+        s1physics.apply(om.get(s1).?, dt);
 
         window.framebuffer.bind();
         gl.Viewport(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height));

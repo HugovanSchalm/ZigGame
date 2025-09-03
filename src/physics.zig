@@ -2,7 +2,7 @@ const std = @import("std");
 const zm = @import("zm");
 const Object = @import("object.zig").Object;
 
-const GRAVITY = 1.0;
+const GRAVITY = 9.8;
 const MAX_FALL_VELOCITY = 100.0;
 
 const Velocity = zm.Vec3f;
@@ -15,7 +15,11 @@ pub const PhysicsBody = struct {
         self.velocity[1] = std.math.clamp(self.velocity[1], -MAX_FALL_VELOCITY, MAX_FALL_VELOCITY);
     }
 
-    pub fn applyVelocity(self: PhysicsBody, to: *Object) void {
-        to.transform.position += self.velocity;
+    pub fn apply(self: *PhysicsBody, to: *Object, dt: f32) void {
+        to.transform.position += zm.vec.scale(self.velocity, dt);
+        if (to.transform.position[1] <= 0.0) {
+            to.transform.position[1] = 0.0;
+            self.velocity[1] = 0.0;
+        }
     }
 };
