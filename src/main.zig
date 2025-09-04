@@ -42,56 +42,6 @@ pub fn main() !void {
     // ===[ OpenGL Settings ]===
     gl.Enable(gl.DEPTH_TEST);
 
-    // ===[ Buffers ]===
-    var vao: c_uint = undefined;
-    gl.GenVertexArrays(1, @ptrCast(&vao));
-    gl.BindVertexArray(vao);
-    defer gl.DeleteVertexArrays(1, @ptrCast(&vao));
-
-    var vbo: c_uint = undefined;
-    gl.GenBuffers(1, @ptrCast(&vbo));
-    defer gl.DeleteBuffers(1, @ptrCast(&vbo));
-    gl.BindBuffer(gl.ARRAY_BUFFER, vbo);
-    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(@TypeOf(VERTICES)), &VERTICES, gl.STATIC_DRAW);
-
-    var ebo: c_uint = undefined;
-    gl.GenBuffers(1, @ptrCast(&ebo));
-    defer gl.DeleteBuffers(1, @ptrCast(&ebo));
-    gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
-    gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(@TypeOf(INDICES)), &INDICES, gl.STATIC_DRAW);
-
-    gl.VertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 0);
-    gl.EnableVertexAttribArray(0);
-    gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 3 * @sizeOf(f32));
-    gl.EnableVertexAttribArray(1);
-    gl.VertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), 5 * @sizeOf(f32));
-    gl.EnableVertexAttribArray(2);
-
-    // ===[ Textures ]===
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_R, gl.REPEAT);
-
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-    gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    var texture: c_uint = undefined;
-    gl.GenTextures(1, @ptrCast(&texture));
-    gl.BindTexture(gl.TEXTURE_2D, texture);
-
-    {
-        const exePath = try std.fs.selfExeDirPathAlloc(allocator);
-        defer allocator.free(exePath);
-        const texturePath = try std.fs.path.join(allocator, &[_][]const u8{ exePath, "/assets/textures/texture.png" });
-        defer allocator.free(texturePath);
-        // var textureImage = try zigimg.Image.fromFilePath(allocator, texturePath);
-        // defer textureImage.deinit();
-        // try textureImage.flipVertically();
-        // gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, @intCast(textureImage.width), @intCast(textureImage.height), 0, gl.RGB, gl.UNSIGNED_BYTE, textureImage.rawBytes().ptr);
-        // gl.GenerateMipmap(gl.TEXTURE_2D);
-    }
-
-    gl.BindVertexArray(0);
-
     // ===[ Shaders ]===
     const lightShader = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
     const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
@@ -101,13 +51,18 @@ pub fn main() !void {
     defer om.deinit();
     var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
     defer suzanneModel.deinit();
+
     const s1 = try om.create(&suzanneModel);
+    om.get(s1).?.transform.position[1] = 30.0;
+    try om.attachPhysicsBody(s1);
 
-    var s1physics: physics.PhysicsBody  = .{};
+    const s2 = try om.create(&suzanneModel);
+    om.get(s2).?.transform.position = .{ -5.0, 15.0, -4.0 };
+    try om.attachPhysicsBody(s2);
 
-    om.get(s1).?.transform.position[1] = 4.0;
-    _ = try om.create(&suzanneModel);
-    _ = try om.create(&suzanneModel);
+    const s3 = try om.create(&suzanneModel);
+    om.get(s3).?.transform.position = .{ 5.0, 10.0, -8.0 };
+    try om.attachPhysicsBody(s3);
 
     var cubeModel = try Model.cube(allocator, &lightShader);
     defer cubeModel.deinit();
@@ -193,8 +148,7 @@ pub fn main() !void {
             }
         }
 
-        s1physics.applyGravity(dt);
-        s1physics.apply(om.get(s1).?, dt);
+        om.updatePhysics(dt);
 
         window.framebuffer.bind();
         gl.Viewport(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height));
@@ -203,7 +157,6 @@ pub fn main() !void {
 
         camera.move(cameraDirection, dt);
 
-        const model = zm.Mat4f.translation(2.0, 0.0, -3.0);
         const view = camera.getViewMatrix();
         const projection = zm.Mat4f.perspective(std.math.degreesToRadians(90.0), window.size.aspectRatio, 0.1, 100.0);
 
@@ -230,20 +183,11 @@ pub fn main() !void {
         texturedShader.setVec3f("lightPos", &lightPosVec);
         texturedShader.setFloat("ambientStrength", 0.1);
 
-        texturedShader.setMat4f("model", &model);
-        texturedShader.setMat4f("view", &view);
-        texturedShader.setMat4f("projection", &projection);
-
         const resolutionVector = zm.Vec2f{ @as(f32, @floatFromInt(window.framebuffer.size.width)), @as(f32, @floatFromInt(window.framebuffer.size.height)) };
         texturedShader.setVec2f("targetResolution", &resolutionVector);
 
         texturedShader.setBool("snapVertices", snapVertices);
 
-        gl.BindTexture(gl.TEXTURE_2D, texture);
-        gl.BindVertexArray(vao);
-        gl.DrawElements(gl.TRIANGLES, INDICES.len, gl.UNSIGNED_INT, 0);
-
-        texturedShader.use();
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
         om.renderAll();

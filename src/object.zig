@@ -2,6 +2,7 @@ const std = @import("std");
 const Model = @import("model.zig").Model;
 const zm = @import("zm");
 const c = @import("c.zig").imports;
+const physics = @import("physics.zig");
 
 const ObjectID = u64;
 
@@ -88,13 +89,16 @@ pub const Object = struct {
 
 pub const ObjectManager = struct {
     allocator: std.mem.Allocator,
-    objects: std.AutoArrayHashMap(usize, Object),
+    objects: std.AutoArrayHashMap(ObjectID, Object),
+    physicsBodies: std.AutoArrayHashMap(ObjectID, physics.PhysicsBody),
 
     pub fn init(allocator: std.mem.Allocator) ObjectManager {
-        const objects = std.AutoArrayHashMap(usize, Object).init(allocator);
+        const objects = std.AutoArrayHashMap(ObjectID, Object).init(allocator);
+        const physicsBodies = std.AutoArrayHashMap(ObjectID, physics.PhysicsBody).init(allocator);
         return ObjectManager{
             .allocator = allocator,
             .objects = objects,
+            .physicsBodies = physicsBodies,
         };
     }
 
@@ -103,6 +107,7 @@ pub const ObjectManager = struct {
             object.deinit();
         }
         self.objects.deinit();
+        self.physicsBodies.deinit();
     }
 
     ///Returns the id instead of a pointer as the object might move during execution
@@ -113,8 +118,31 @@ pub const ObjectManager = struct {
         return object.id;
     }
 
+    pub fn attachPhysicsBody(self: *ObjectManager, objectId: ObjectID) !void {
+        if (!self.objects.contains(objectId)) {
+            return error.ObjectNotFound;
+        }
+
+        const body = physics.PhysicsBody.init(2.0, 2.0);
+        try self.physicsBodies.put(objectId, body);
+    }
+
     pub fn get(self: ObjectManager, id: ObjectID) ?*Object {
         return self.objects.getPtr(id);
+    }
+
+    pub fn getAll(self: ObjectManager) []Object {
+        return self.objects.values();
+    }
+
+    pub fn updatePhysics(self: ObjectManager, dt: f32) void {
+        for (self.physicsBodies.keys()) |id| {
+            const body = self.physicsBodies.getPtr(id).?;
+            body.applyGravity(dt);
+
+            const object = self.objects.getPtr(id).?;
+            body.updateObject(object, dt);
+        }
     }
 
     pub fn renderAll(self: ObjectManager) void {
