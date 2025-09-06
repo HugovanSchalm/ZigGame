@@ -49,12 +49,13 @@ pub fn main() !void {
     // ===[ Objects ]===
     var om = Object.ObjectManager.init(allocator);
     defer om.deinit();
-    var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
+    var suzanneModel = try Model.fromGltf(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
     defer suzanneModel.deinit();
 
-    const s1 = try om.create(&suzanneModel);
-    om.get(s1).?.transform.position[1] = 30.0;
-    try om.attachPhysicsBody(s1);
+    var vikingModel = try Model.fromGlb(allocator, "assets/models/Viking.glb", &texturedShader);
+    defer vikingModel.deinit();
+
+    _ = try om.create(&vikingModel);
 
     const s2 = try om.create(&suzanneModel);
     om.get(s2).?.transform.position = .{ -5.0, 15.0, -4.0 };
@@ -181,7 +182,7 @@ pub fn main() !void {
 
         texturedShader.setVec3f("lightColor", &lightColor);
         texturedShader.setVec3f("lightPos", &lightPosVec);
-        texturedShader.setFloat("ambientStrength", 0.1);
+        texturedShader.setFloat("ambientStrength", 0.2);
 
         const resolutionVector = zm.Vec2f{ @as(f32, @floatFromInt(window.framebuffer.size.width)), @as(f32, @floatFromInt(window.framebuffer.size.height)) };
         texturedShader.setVec2f("targetResolution", &resolutionVector);

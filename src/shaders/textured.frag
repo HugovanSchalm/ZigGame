@@ -6,7 +6,11 @@ in vec4 vertLightColor;
 out vec4 outColor;
 
 uniform sampler2D sampler;
+uniform bool textured;
 
 void main() {
-    outColor = vertLightColor * texture(sampler, outTexCoord);
+    outColor = vertLightColor;
+    if (textured) {
+        outColor *= texture(sampler, outTexCoord);
+    }
 }

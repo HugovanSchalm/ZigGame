@@ -29,6 +29,11 @@ pub const Shader = struct {
         gl.Uniform3fv(uniformLocation, 1, @ptrCast(value));
     }
 
+    pub fn setVec4f(self: Shader, name: [*:0]const u8, value: *const zm.Vec4f) void {
+        const uniformLocation = gl.GetUniformLocation(self.id, name);
+        gl.Uniform4fv(uniformLocation, 1, @ptrCast(value));
+    }
+
     pub fn setMat4f(self: Shader, name: [*:0]const u8, value: *const zm.Mat4f) void {
         const uniformLocation = gl.GetUniformLocation(self.id, name);
         gl.UniformMatrix4fv(uniformLocation, 1, gl.TRUE, @ptrCast(value));

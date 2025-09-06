@@ -1,8 +1,8 @@
 #version 330 core
 
-layout (location = 0)  in vec3 inPosition;
-layout (location = 1)  in vec2 inTexCoord;
-layout (location = 2)  in vec3 inNormal;
+layout (location = 0) in vec3 inPosition;
+layout (location = 1) in vec2 inTexCoord;
+layout (location = 2) in vec3 inNormal;
 
 noperspective out vec2 outTexCoord;
 out vec4 vertLightColor;
@@ -14,6 +14,8 @@ uniform mat4 projection;
 uniform vec3 lightColor;
 uniform vec3 lightPos;
 uniform float ambientStrength;
+
+uniform vec4 meshColor;
 
 uniform vec2 targetResolution;
 
@@ -44,5 +46,5 @@ void main() {
 
     vec3 lightResult = ambient + diffuse;
 
-    vertLightColor = vec4(lightResult, 1.0);
+    vertLightColor = vec4(lightResult, 1.0) * meshColor;
 }
