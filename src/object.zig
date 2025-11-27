@@ -6,13 +6,6 @@ const physics = @import("physics.zig");
 
 const ObjectID = u64;
 
-pub const Transform = struct {
-    position: zm.Vec3f = zm.vec.zero(3, f32),
-    rotationQuat: zm.Quaternionf = zm.Quaternionf.identity(),
-    rotationAngle: zm.Vec3f = zm.vec.zero(3, f32),
-    scale: zm.Vec3f = zm.Vec3f{ 1.0, 1.0, 1.0 },
-};
-
 pub const Object = struct {
     allocator: std.mem.Allocator,
     id: ObjectID,
