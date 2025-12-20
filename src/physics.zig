@@ -7,29 +7,38 @@ const MAX_FALL_VELOCITY = 100.0;
 
 const Velocity = zm.Vec3f;
 
-pub const PhysicsBody = struct {
-    velocity: Velocity = zm.vec.zero(3, f32),
-    width: f32,
-    height: f32,
+pub const Sphere = struct {
+    radius: f32,
+};
 
-    pub fn init(width: f32, height: f32) PhysicsBody {
-        return .{
-            .width = width,
-            .height = height
-        };
+pub const Shape = union(enum) {
+    sphere: Sphere,
+
+    pub fn getCenterOfMass(self: Shape) zm.Vec3f {
+        // TODO: enable changing of com
+        _ = self;
+        return zm.vec.zero(3, f32);
+    }
+};
+
+pub const Body = struct {
+    position: zm.Vec3f,
+    rotation: zm.Quaternionf,
+    shape: Shape,
+};
+
+pub const Scene = struct {
+    bodies: std.ArrayList(Body),
+
+    pub fn init() void {
+        return;
     }
 
-    pub fn applyGravity(self: *PhysicsBody, dt: f32) void {
-        self.velocity[1] -= dt * GRAVITY;
-        self.velocity[1] = std.math.clamp(self.velocity[1], -MAX_FALL_VELOCITY, MAX_FALL_VELOCITY);
+    pub fn update(dt: f32) void {
+        _ = dt;
     }
 
-    pub fn updateObject(self: *PhysicsBody, to: *Object, dt: f32) void {
-        to.transform.position += zm.vec.scale(self.velocity,dt);
-
-        if (to.transform.position[1] <= 0.0) {
-            to.transform.position[1] = 0.0;
-            self.velocity[1] = 0.0;
-        }
+    pub fn getCenterOfMassWorldSpace(self: Body) zm.Vec3f {
+        const com = self.shape.getCenterOfMass();
     }
 };
