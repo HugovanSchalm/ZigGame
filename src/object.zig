@@ -90,11 +90,11 @@ pub const Object = struct {
 pub const ObjectManager = struct {
     allocator: std.mem.Allocator,
     objects: std.AutoArrayHashMap(ObjectID, Object),
-    physicsBodies: std.AutoArrayHashMap(ObjectID, physics.PhysicsBody),
+    physicsBodies: std.AutoArrayHashMap(ObjectID, physics.Body),
 
     pub fn init(allocator: std.mem.Allocator) ObjectManager {
         const objects = std.AutoArrayHashMap(ObjectID, Object).init(allocator);
-        const physicsBodies = std.AutoArrayHashMap(ObjectID, physics.PhysicsBody).init(allocator);
+        const physicsBodies = std.AutoArrayHashMap(ObjectID, physics.Body).init(allocator);
         return ObjectManager{
             .allocator = allocator,
             .objects = objects,
@@ -119,12 +119,14 @@ pub const ObjectManager = struct {
     }
 
     pub fn attachPhysicsBody(self: *ObjectManager, objectId: ObjectID) !void {
-        if (!self.objects.contains(objectId)) {
-            return error.ObjectNotFound;
-        }
-
-        const body = physics.PhysicsBody.init(2.0, 2.0);
-        try self.physicsBodies.put(objectId, body);
+        _ = self;
+        _ = objectId;
+        // if (!self.objects.contains(objectId)) {
+        //     return error.ObjectNotFound;
+        // }
+        //
+        // const body = physics.PhysicsBody.init(2.0, 2.0);
+        // try self.physicsBodies.put(objectId, body);
     }
 
     pub fn get(self: ObjectManager, id: ObjectID) ?*Object {
@@ -136,13 +138,15 @@ pub const ObjectManager = struct {
     }
 
     pub fn updatePhysics(self: ObjectManager, dt: f32) void {
-        for (self.physicsBodies.keys()) |id| {
-            const body = self.physicsBodies.getPtr(id).?;
-            body.applyGravity(dt);
-
-            const object = self.objects.getPtr(id).?;
-            body.updateObject(object, dt);
-        }
+        _ = self;
+        _ = dt;
+        // for (self.physicsBodies.keys()) |id| {
+        //     const body = self.physicsBodies.getPtr(id).?;
+        //     body.applyGravity(dt);
+        //
+        //     const object = self.objects.getPtr(id).?;
+        //     body.updateObject(object, dt);
+        // }
     }
 
     pub fn renderAll(self: ObjectManager) void {

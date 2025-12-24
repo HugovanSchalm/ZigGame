@@ -31,30 +31,32 @@ pub fn build(b: *std.Build) void {
         .image_enable_png = true,
     });
 
-    const exe = b.addExecutable(.{ 
-        .name = "ZigGame", 
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }) 
+    const exe_mod = b.addModule("ZigGame", .{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
     });
 
-    exe.linkLibC();
-    exe.linkSystemLibrary("SDL3");
-    exe.root_module.addImport("gl", glbindings);
-    exe.root_module.addImport("zm", zm.module("zm"));
-    exe.root_module.addImport("zgltf", zgltf.module("zgltf"));
-    exe.root_module.addImport("sdl3", sdl3.module("sdl3"));
-    exe.linkLibrary(cimgui_dep.artifact("cimgui"));
+    exe_mod.linkSystemLibrary("SDL3", .{});
+    exe_mod.addImport("gl", glbindings);
+    exe_mod.addImport("zm", zm.module("zm"));
+    exe_mod.addImport("zgltf", zgltf.module("zgltf"));
+    exe_mod.addImport("sdl3", sdl3.module("sdl3"));
+    exe_mod.linkLibrary(cimgui_dep.artifact("cimgui"));
 
-    b.installArtifact(exe);
+    const exe = b.addExecutable(.{
+        .name = "ZigGame",
+        .root_module = exe_mod,
+    });
 
     b.installDirectory(.{
         .source_dir = b.path("./assets"),
         .install_dir = .{ .prefix = {} },
         .install_subdir = "bin/assets",
     });
+
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
 
@@ -66,4 +68,12 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+
+    const exe_check = b.addExecutable(.{
+        .name = "ZigGameCheck",
+        .root_module = exe_mod,
+    });
+
+    const check_step = b.step("check", "Check if the game compiles");
+    check_step.dependOn(&exe_check.step);
 }

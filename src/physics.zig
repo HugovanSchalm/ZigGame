@@ -40,5 +40,6 @@ pub const Scene = struct {
 
     pub fn getCenterOfMassWorldSpace(self: Body) zm.Vec3f {
         const com = self.shape.getCenterOfMass();
+        _ = com;
     }
 };
