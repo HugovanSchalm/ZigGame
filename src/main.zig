@@ -60,16 +60,19 @@ pub fn main() !void {
     defer world.deinit();
 
     for (&objects) |*o| {
-        _ = try world.createBody(&o.transform);
+        var pb = try world.createBody(&o.transform);
+        pb.elasticity = 0.3;
     }
 
     // Ground
-    var groundTransform: Transform = .{};
+    var groundTransform: Transform = .{
+        .position = .{ 0.0, -20.0, 0.0 },
+    };
     var groundBody = try world.createBody(&groundTransform);
     groundBody.shape.shapeType.sphere.radius = 20.0;
     groundBody.inverseMass = 0.0;
 
-    objects[0].transform.position[1] = 30.0;
+    objects[0].transform.position = .{ 0.0, 30.0, -1.0 };
 
     objects[1].transform.position = .{ -5.0, 15.0, -4.0 };
 

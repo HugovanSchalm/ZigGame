@@ -24,6 +24,7 @@ pub const PhysicsBody = struct {
     linearVelocity: zm.Vec3f = zm.vec.zero(3, f32),
     shape: Shape = .{},
     inverseMass: f32 = 1.0,
+    elasticity: f32 = 1.0,
 
     pub fn centerOfMassWorldSpace(self: *const PhysicsBody) zm.Vec3f {
         const com = self.shape.com;
@@ -105,9 +106,14 @@ const Contact = struct {
     pub fn resolve(self: *Contact) void {
         const bodyA = self.bodyA orelse return;
         const bodyB = self.bodyB orelse return;
+        const elasticity = bodyA.elasticity * bodyB.elasticity;
 
-        bodyA.linearVelocity = zm.vec.zero(3, f32);
-        bodyB.linearVelocity = zm.vec.zero(3, f32);
+        const vab = bodyA.linearVelocity - bodyB.linearVelocity;
+        const impulseJ = -(1.0 + elasticity) * zm.vec.dot(vab, self.normal) / (bodyA.inverseMass + bodyB.inverseMass);
+        const vectorImpulseJ = zm.vec.scale(self.normal, impulseJ);
+
+        bodyA.applyImpulse(vectorImpulseJ);
+        bodyB.applyImpulse(zm.vec.scale(vectorImpulseJ, -1.0));
 
         const tA = bodyA.inverseMass / (bodyA.inverseMass + bodyB.inverseMass);
         const tB = bodyB.inverseMass / (bodyA.inverseMass + bodyB.inverseMass);
