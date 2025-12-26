@@ -77,26 +77,16 @@ pub const PhysicsBody = struct {
         const radiusAB = selfSphere.radius + otherSphere.radius;
         const lengthSquare = zm.vec.lenSq(ab);
 
-        if (!std.math.isNan(ab[0])) {
-            std.debug.print("{any}\n", .{other.transform.position});
-            std.debug.print("{any}\n", .{self.transform.position});
-            std.debug.print("{any}\n", .{ab});
-            std.debug.print("{any}\n", .{lengthSquare});
-            std.debug.print("{any}\n", .{radiusAB});
-
-            std.debug.print("\n", .{});
-        }
-
         return lengthSquare <= (radiusAB * radiusAB);
     }
 };
 
 const Contact = struct {
-    WorldA: zm.Vec3f = zm.vec.zero(3, f32),
-    WorldB: zm.Vec3f = zm.vec.zero(3, f32),
-    LocalA: zm.Vec3f = zm.vec.zero(3, f32),
-    LocalB: zm.Vec3f = zm.vec.zero(3, f32),
-    normal: zm.Vec3f = zm.vec.zero(3, f32),
+    WorldA: zm.Vec3f = @splat(0),
+    WorldB: zm.Vec3f = @splat(0),
+    LocalA: zm.Vec3f = @splat(0),
+    LocalB: zm.Vec3f = @splat(0),
+    normal: zm.Vec3f = @splat(0),
     seperationDistance: f32 = 0.0,
     timeOfImpact: f32 = 0.0,
 
@@ -115,6 +105,7 @@ const Contact = struct {
         bodyA.applyImpulse(vectorImpulseJ);
         bodyB.applyImpulse(zm.vec.scale(vectorImpulseJ, -1.0));
 
+        // Epsilon prevents weird bug when bouncing vertically
         const tA = bodyA.inverseMass / (bodyA.inverseMass + bodyB.inverseMass);
         const tB = bodyB.inverseMass / (bodyA.inverseMass + bodyB.inverseMass);
 
@@ -149,18 +140,13 @@ pub const World = struct {
         for (self.bodies.items) |*b| {
             const gravityForce = zm.Vec3f{ 0.0, GRAVITY, 0.0 };
             const mass = 1.0 / b.inverseMass;
-            const impulse = zm.vec.scale(gravityForce, mass * dt);
-            b.applyImpulse(impulse);
+            const gravityImpulse = zm.vec.scale(gravityForce, mass * dt);
+            b.applyImpulse(gravityImpulse);
         }
 
         // Collisions
         for (self.bodies.items, 0..) |*body, i| {
-            for (self.bodies.items, 0..) |*other, j| {
-                // TODO should be removable
-                if (i == j) {
-                    continue;
-                }
-
+            for (self.bodies.items[i+1..]) |*other| {
                 if (body.inverseMass == 0.0 and other.inverseMass == 0.0) {
                     continue;
                 }

@@ -61,18 +61,18 @@ pub fn main() !void {
 
     for (&objects) |*o| {
         var pb = try world.createBody(&o.transform);
-        pb.elasticity = 0.3;
+        pb.elasticity = 0.5;
     }
 
     // Ground
     var groundTransform: Transform = .{
-        .position = .{ 0.0, -20.0, 0.0 },
+        .position = .{ 0.0, -1000.0, 0.0 },
     };
     var groundBody = try world.createBody(&groundTransform);
-    groundBody.shape.shapeType.sphere.radius = 20.0;
+    groundBody.shape.shapeType.sphere.radius = 1000.0;
     groundBody.inverseMass = 0.0;
 
-    objects[0].transform.position = .{ 0.0, 30.0, -1.0 };
+    objects[0].transform.position = .{ 0.0, 10.0, 0.0 };
 
     objects[1].transform.position = .{ -5.0, 15.0, -4.0 };
 
