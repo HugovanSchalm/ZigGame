@@ -5,7 +5,7 @@ const Shader = @import("shader.zig");
 const Camera = @import("camera.zig");
 const Model = @import("model.zig");
 const Window = @import("window.zig");
-const Object = @import("object.zig");
+const Object = @import("Object.zig");
 const physics = @import("physics.zig");
 const sdl = @import("sdl3");
 const c = @import("c.zig").imports;
@@ -46,23 +46,25 @@ pub fn main() !void {
     const lightShader = try Shader.init(@embedFile("shaders/basic.vert"), @embedFile("shaders/basic.frag"));
     const texturedShader = try Shader.init(@embedFile("shaders/textured.vert"), @embedFile("shaders/textured.frag"));
 
-    // ===[ Objects ]===
-    var om = Object.ObjectManager.init(allocator);
-    defer om.deinit();
     var suzanneModel = try Model.init(allocator, "assets/models/Suzanne.gltf", "assets/models/Suzanne.bin", &texturedShader);
     defer suzanneModel.deinit();
 
-    const s1 = try om.create(&suzanneModel);
-    om.get(s1).?.transform.position[1] = 30.0;
-    try om.attachPhysicsBody(s1);
+    var objects = [_]Object{
+        try Object.init(allocator, &suzanneModel, "Suzanne 1"),
+        try Object.init(allocator, &suzanneModel, "Suzanne 2"),
+        try Object.init(allocator, &suzanneModel, "Suzanne 3"),
+    };
 
-    const s2 = try om.create(&suzanneModel);
-    om.get(s2).?.transform.position = .{ -5.0, 15.0, -4.0 };
-    try om.attachPhysicsBody(s2);
+    var world = physics.World.init(allocator);
+    for (&objects) |*o| {
+        _ = try world.createBody(&o.transform);
+    }
 
-    const s3 = try om.create(&suzanneModel);
-    om.get(s3).?.transform.position = .{ 5.0, 10.0, -8.0 };
-    try om.attachPhysicsBody(s3);
+    objects[0].transform.position[0] = 30.0;
+
+    objects[1].transform.position = .{ -5.0, 15.0, -4.0 };
+
+    objects[2].transform.position = .{ 5.0, 10.0, -8.0 };
 
     var cubeModel = try Model.cube(allocator, &lightShader);
     defer cubeModel.deinit();
@@ -148,7 +150,7 @@ pub fn main() !void {
             }
         }
 
-        om.updatePhysics(dt);
+        world.update(dt);
 
         window.framebuffer.bind();
         gl.Viewport(0, 0, @intCast(window.framebuffer.size.width), @intCast(window.framebuffer.size.height));
@@ -190,7 +192,10 @@ pub fn main() !void {
 
         texturedShader.setMat4f("view", &view);
         texturedShader.setMat4f("projection", &projection);
-        om.renderAll();
+
+        for (&objects) |*o| {
+            o.render();
+        }
 
         gl.BindFramebuffer(gl.FRAMEBUFFER, 0);
 

@@ -1,45 +1,81 @@
 const std = @import("std");
 const zm = @import("zm");
-const Object = @import("object.zig").Object;
-
-const GRAVITY = 9.8;
-const MAX_FALL_VELOCITY = 100.0;
+const Transform = @import("components/Transform.zig");
 
 const Velocity = zm.Vec3f;
 
+const GRAVITY = -9.8;
+
 pub const Sphere = struct {
-    radius: f32,
+    radius: f32 = 1.0,
 };
 
-pub const Shape = union(enum) {
+pub const ShapeType = union(enum) {
     sphere: Sphere,
+};
 
-    pub fn getCenterOfMass(self: Shape) zm.Vec3f {
-        // TODO: enable changing of com
-        _ = self;
-        return zm.vec.zero(3, f32);
+pub const Shape = struct {
+    shapeType: ShapeType = .{ .sphere = .{} },
+    com: zm.Vec3f = zm.vec.zero(3, f32),
+};
+
+pub const PhysicsBody = struct {
+    transform: *Transform,
+    linearVelocity: zm.Vec3f = zm.vec.zero(3, f32),
+    shape: Shape = .{},
+
+    pub fn centerOfMassWorldSpace(self: *const PhysicsBody) zm.Vec3f {
+        const com = self.shape.com;
+        const pos = self.position;
+        return com + pos;
+    }
+
+    pub fn centerOfMassBodySpace(self: *const PhysicsBody) zm.Vec3f {
+        return self.shape.com;
+    }
+
+    pub fn worldToBodySpace(self: *const PhysicsBody, point: zm.Vec3f) zm.Vec3f {
+        const tmp = point - self.centerOfMassWorldSpace();
+        const inverseOrient = self.rotation.inverse();
+
+        const quaternionVector = zm.Quaternionf.fromVec3(0.0, tmp);
+        const rotated = inverseOrient.multiply(quaternionVector).multiply(self.rotation);
+        return zm.Vec3f{ rotated.x, rotated.y, rotated.z };
+    }
+
+    pub fn bodyToWorldSpace(self: *const PhysicsBody, point: zm.Vec3f) zm.Vec3f {
+        const inverseOrient = self.rotation.inverse();
+        const quaternionVector = zm.Quaternionf.fromVec3(0.0, point);
+        const rotated = self.rotation.multiply(quaternionVector).multiply(inverseOrient);
+        return self.centerOfMassWorldSpace() + rotated;
     }
 };
 
-pub const Body = struct {
-    position: zm.Vec3f,
-    rotation: zm.Quaternionf,
-    shape: Shape,
-};
+pub const World = struct {
+    bodies: std.ArrayList(PhysicsBody),
+    allocator: std.mem.Allocator,
 
-pub const Scene = struct {
-    bodies: std.ArrayList(Body),
-
-    pub fn init() void {
-        return;
+    pub fn init(allocator: std.mem.Allocator) World {
+        return .{
+            .bodies = .{},
+            .allocator = allocator,
+        };
     }
 
-    pub fn update(dt: f32) void {
-        _ = dt;
+    pub fn createBody(self: *World, transform: *Transform) !*PhysicsBody {
+        try self.bodies.append(self.allocator, .{ .transform = transform });
+        return &self.bodies.items[self.bodies.items.len - 1];
     }
 
-    pub fn getCenterOfMassWorldSpace(self: Body) zm.Vec3f {
-        const com = self.shape.getCenterOfMass();
-        _ = com;
+    pub fn update(self: *World, dt: f32) void {
+        for (self.bodies.items) |*b| {
+            b.linearVelocity += zm.vec.scale(zm.Vec3f {0.0, GRAVITY, 0.0}, dt);
+            b.transform.position += zm.vec.scale(b.linearVelocity, dt);
+
+            if (b.transform.position[1] <= 0.0) {
+                b.transform.position[1] = 0.0;
+                b.linearVelocity[1] = 0.0;
+            }
+        }
     }
 };
