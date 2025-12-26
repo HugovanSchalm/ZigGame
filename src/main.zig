@@ -9,6 +9,7 @@ const Object = @import("Object.zig");
 const physics = @import("physics.zig");
 const sdl = @import("sdl3");
 const c = @import("c.zig").imports;
+const Transform = @import("components/Transform.zig");
 
 const VERTICES = [_]f32{
     //  VERTEX COORDS       TEXTURE COORDS  NORMALS
@@ -56,11 +57,19 @@ pub fn main() !void {
     };
 
     var world = physics.World.init(allocator);
+    defer world.deinit();
+
     for (&objects) |*o| {
         _ = try world.createBody(&o.transform);
     }
 
-    objects[0].transform.position[0] = 30.0;
+    // Ground
+    var groundTransform: Transform = .{};
+    var groundBody = try world.createBody(&groundTransform);
+    groundBody.shape.shapeType.sphere.radius = 20.0;
+    groundBody.inverseMass = 0.0;
+
+    objects[0].transform.position[1] = 30.0;
 
     objects[1].transform.position = .{ -5.0, 15.0, -4.0 };
 
