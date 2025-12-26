@@ -17,3 +17,5 @@ zig build run
     A great resource for learning OpenGL
 - https://www.david-colson.com/2021/11/30/ps1-style-renderer.html 
     For some cool rendering techniques.
+- https://gamephysicsweekend.github.io/
+    For basic physics
